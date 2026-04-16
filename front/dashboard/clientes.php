@@ -89,6 +89,9 @@
                                     class="btn btn-sm btn-light text-primary border shadow-sm px-3 rounded-pill fw-medium header-menu shadow-hover-md transition-all">
                                     Ver Perfil <i class="bi bi-arrow-right-short"></i>
                                 </a>
+                                <button onclick="deleteCliente(<?= $cli['id'] ?>)" class="btn btn-sm btn-outline-danger ms-2 rounded-pill shadow-sm" title="Eliminar Cliente">
+                                    <i class="bi bi-trash"></i>
+                                </button>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -215,5 +218,46 @@
     function openClienteModal() {
         clienteForm.reset();
         if (clienteModal) clienteModal.show();
+    }
+
+    function deleteCliente(id) {
+        Swal.fire({
+            title: '¿Estás seguro?',
+            text: "Se eliminará el cliente, sus servicios asociados, y su usuario de portal. ¡Esta acción es irreversible!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const formData = new FormData();
+                formData.append('id', id);
+
+                fetch('/vizone/dashboard/clientes/delete', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Eliminado',
+                            text: data.message,
+                            showConfirmButton: false,
+                            timer: 1500
+                        }).then(() => location.reload());
+                    } else {
+                        Swal.fire('Error', data.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire('Error', 'Problema al comunicarse con el servidor.', 'error');
+                });
+            }
+        });
     }
 </script>

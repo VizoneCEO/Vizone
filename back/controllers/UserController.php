@@ -25,8 +25,11 @@ class UserController
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
-        if ($_SESSION['role'] !== 'admin') {
-            $this->jsonResponse(false, 'Solo los administradores pueden gestionar usuarios.');
+        $url = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+        if (strpos($url, '/dashboard/usuarios/update-password') === false) {
+            if ($_SESSION['role'] !== 'admin') {
+                $this->jsonResponse(false, 'Solo los administradores pueden gestionar usuarios.');
+            }
         }
     }
 
@@ -61,6 +64,11 @@ class UserController
         } else {
             // Creación
             $result = $this->authService->createUser($username, $password, $role);
+            if ($result['success'] && $role === 'cliente' && isset($result['id'])) {
+                require_once BACK_PATH . 'services/ClienteService.php';
+                $clienteService = new ClienteService();
+                $clienteService->createClienteFromUser($result['id'], $username);
+            }
         }
 
         return $this->jsonResponse($result['success'], $result['message']);
@@ -87,6 +95,39 @@ class UserController
         $currentLoggedId = $_SESSION['user_id'];
 
         $result = $this->authService->deleteUser($id, $currentLoggedId);
+
+        return $this->jsonResponse($result['success'], $result['message']);
+    }
+
+    /**
+     * Fuerza el cambio de contraseña para el usuario actual y limpia la bandera.
+     */
+    public function forceUpdatePassword()
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            return $this->jsonResponse(false, 'Método no permitido.');
+        }
+
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        $currentLoggedId = $_SESSION['user_id'];
+        $newPassword = $_POST['new_password'] ?? '';
+        $confirmPassword = $_POST['confirm_password'] ?? '';
+
+        if (empty($newPassword) || empty($confirmPassword)) {
+            return $this->jsonResponse(false, 'Ambos campos son obligatorios.');
+        }
+
+        if ($newPassword !== $confirmPassword) {
+            return $this->jsonResponse(false, 'Las contraseñas no coinciden.');
+        }
+
+        $result = $this->authService->forceUpdatePassword($currentLoggedId, $newPassword);
+
+        if ($result['success']) {
+            $_SESSION['must_change_password'] = false; // Quitar bandera
+        }
 
         return $this->jsonResponse($result['success'], $result['message']);
     }

@@ -44,6 +44,7 @@ $router = new Router();
 // --- Rutas Públicas Extras ---
 $router->add('/', 'HomeController', 'index');
 $router->add('/servicios', 'ServiciosController', 'index');
+$router->add('/proyectos', 'ProyectoController', 'index'); // Portafolio Público
 $router->add('/contacto', 'ContactoController', 'index');
 
 // --- Rutas de Autenticación y Dashboard ---
@@ -55,28 +56,50 @@ $router->add('/logout', 'LoginController', 'logout');    // Procesa el logout
 $router->add('/dashboard', 'DashboardController', 'index');           // Muestra panel de usuarios (por defecto)
 $router->add('/dashboard/usuarios', 'DashboardController', 'index');  // Muestra panel de usuarios
 $router->add('/dashboard/clientes', 'DashboardController', 'clientes'); // Muestra panel de clientes
-$router->add('/dashboard/tickets', 'DashboardController', 'tickets');   // Muestra panel de tickets
+$router->add('/dashboard/tickets', 'TicketController', 'index');               // Vista principal tickets
+$router->add('/dashboard/tickets/save', 'TicketController', 'save');           // Crear ticket
+$router->add('/dashboard/tickets/update', 'TicketController', 'update');       // Editar ticket
+$router->add('/dashboard/tickets/estado', 'TicketController', 'updateEstado'); // Cambio rápido estado
+$router->add('/dashboard/tickets/comentario/save', 'TicketController', 'saveComentario'); // Comentario
+$router->add('/dashboard/tickets/delete', 'TicketController', 'delete');       // Eliminar ticket
 $router->add('/dashboard/pagos', 'DashboardController', 'pagos');       // Muestra panel de pagos globales
 $router->add('/dashboard/mi-portal', 'DashboardController', 'miPortal'); // Dashboard para clientes
+$router->add('/dashboard/proyectos', 'ProyectoController', 'adminIndex'); // Gestión de proyectos CRUD
+$router->add('/dashboard/cambiar-password', 'DashboardController', 'cambiarPassword'); // Pantalla forzada para nueva contraseña
 
 // API: CRUD Usuarios (Reciben POST)
 $router->add('/dashboard/usuarios/save', 'UserController', 'save');
 $router->add('/dashboard/usuarios/delete', 'UserController', 'delete');
+$router->add('/dashboard/usuarios/update-password', 'UserController', 'forceUpdatePassword');
+
+// API: CRUD Proyectos (Reciben POST)
+$router->add('/dashboard/proyectos/save', 'ProyectoController', 'save');
+$router->add('/dashboard/proyectos/delete', 'ProyectoController', 'delete');
+$router->add('/dashboard/proyectos/refresh-screenshots', 'ProyectoController', 'refreshScreenshots');
 
 // API: CRUD Clientes (Reciben POST)
 $router->add('/dashboard/clientes/save', 'ClienteController', 'save');
+$router->add('/dashboard/clientes/delete', 'ClienteController', 'delete');
+$router->add('/dashboard/clientes/update-profile', 'ClienteController', 'updateProfile');
+$router->add('/dashboard/clientes/reset-password', 'ClienteController', 'resetPassword');
 $router->add('/dashboard/clientes/servicio/save', 'ClienteController', 'saveService');
 $router->add('/dashboard/clientes/servicio/update', 'ClienteController', 'updateService');
 $router->add('/dashboard/clientes/servicio/delete', 'ClienteController', 'deleteService');
 $router->add('/dashboard/clientes/pagos/save', 'ClienteController', 'savePago');
+$router->add('/dashboard/clientes/pagos/update', 'ClienteController', 'updatePago');
 $router->add('/dashboard/clientes/pagos/delete', 'ClienteController', 'deletePago');
+$router->add('/dashboard/clientes/pagos/facturas/save', 'ClienteController', 'saveFactura');
 $router->add('/dashboard/clientes/documento/save', 'ClienteController', 'saveDocument');
 $router->add('/dashboard/cliente/detalles', 'DashboardController', 'clienteDetalles');
 
 // 6. Obtener la URI actual (limpiando query strings si existen)
 $url = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
-// Si estás trabajando en una subcarpeta (ej. htdocs/vizone), ajusta la ruta base
+// Ajustamos la constante BASE_URL de forma dinámica para recursos y links
+$isLocalhost = in_array($_SERVER['SERVER_NAME'], ['localhost', '127.0.0.1']);
+define('BASE_URL', $isLocalhost ? '/vizone/' : '/');
+
+// Siempre limpiamos "/vizone" del URL para evitar 404s en producción por links cacheados legacy
 $basepath = '/vizone';
 if (strpos($url, $basepath) === 0) {
     $url = substr($url, strlen($basepath));

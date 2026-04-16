@@ -21,6 +21,19 @@ class DashboardController
             header('Location: /vizone/login');
             exit;
         }
+
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        // Forzar cambio de contraseña
+        $url = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+        if (isset($_SESSION['must_change_password']) && $_SESSION['must_change_password'] === true) {
+            if (strpos($url, '/dashboard/cambiar-password') === false && strpos($url, '/dashboard/usuarios/update-password') === false) {
+                header('Location: /vizone/dashboard/cambiar-password');
+                exit;
+            }
+        }
     }
 
     /**
@@ -179,6 +192,15 @@ class DashboardController
             'serviciosActivos' => $serviciosActivos,
             'activeModule' => 'pagos'
         ]);
+    }
+
+    /**
+     * Muestra la pantalla para forzar cambio de contraseña
+     */
+    public function cambiarPassword()
+    {
+        $pageTitle = 'Cambiar Contraseña | Vizone';
+        require_once FRONT_PATH . 'dashboard/cambiar_password.php';
     }
 }
 ?>

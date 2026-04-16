@@ -286,6 +286,15 @@
                             </a>
                         </li>
 
+                        <!-- Proyectos -->
+                        <li class="menu-item">
+                            <a href="/vizone/dashboard/proyectos"
+                                class="menu-link <?= (isset($activeModule) && $activeModule === 'proyectos') ? 'active' : '' ?>">
+                                <i class="bi bi-grid-1x2-fill"></i>
+                                Portafolio Portyectos
+                            </a>
+                        </li>
+
                         <!-- Pagos Globales -->
                         <li class="menu-item">
                             <a href="/vizone/dashboard/pagos"
@@ -332,12 +341,10 @@
             <!-- Top Navbar -->
             <nav class="top-navbar">
                 <div>
-                    <!-- Botón Hamburguesa Móvil (Simulado por ahora) -->
+                    <!-- Botón Hamburguesa Móvil -->
                     <button type="button" id="sidebarCollapse" class="btn btn-light d-md-none shadow-sm">
                         <i class="bi bi-list fs-5"></i>
                     </button>
-                    <!-- Título de sección opcional -->
-                    <span class="ms-3 fw-medium text-muted d-none d-md-inline">Empresa Tech Solutions S.A.</span>
                 </div>
 
                 <div class="d-flex align-items-center gap-4">

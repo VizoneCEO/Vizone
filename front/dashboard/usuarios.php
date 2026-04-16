@@ -53,10 +53,19 @@
                                 </div>
                             </td>
                             <td>
+                                <?php 
+                                    $rolMap = [
+                                        'admin' => 'Administrador',
+                                        'apoyo' => 'Apoyo de sistema',
+                                        'cliente' => 'Cliente',
+                                        'estudiante' => 'Estudiante'
+                                    ];
+                                    $rolName = $rolMap[$user['role']] ?? ucfirst($user['role']);
+                                ?>
                                 <span class="badge"
                                     style="background-color: rgba(0, 210, 255, 0.1); color: #008eb3; border-radius: 50px; padding: 0.4em 0.8em; font-weight: 500;">
                                     <i class="bi bi-shield-lock-fill me-1"></i>
-                                    <?= htmlspecialchars(ucfirst($user['role'])) ?>
+                                    <?= htmlspecialchars($rolName) ?>
                                 </span>
                             </td>
                             <td>
@@ -113,12 +122,13 @@
                         <label for="role" class="form-label small fw-medium text-muted">Rol en el Sistema</label>
                         <select class="form-select shadow-none" id="role" name="role" required>
                             <option value="admin">Administrador</option>
-                            <option value="editor">Editor</option>
-                            <option value="viewer">Lector</option>
+                            <option value="apoyo">Apoyo de sistema</option>
+                            <option value="cliente">Cliente</option>
+                            <option value="estudiante">Estudiante</option>
                         </select>
                     </div>
 
-                    <div class="mb-2">
+                    <div class="mb-2" id="passwordContainer">
                         <label for="password" class="form-label small fw-medium text-muted">Contraseña <span
                                 id="passHelp" class="text-secondary fw-normal"></span></label>
                         <input type="password" class="form-control shadow-none" id="password" name="password">
@@ -198,10 +208,18 @@
         // Si edita, password es opcional
         const passHelp = document.getElementById('passHelp');
         const passInput = document.getElementById('password');
+        const pwdContainer = document.getElementById('passwordContainer');
+        
+        // Reset container display first
+        pwdContainer.style.display = 'block';
         
         if (isEditing) {
             passHelp.innerText = '(Dejar en blanco para mantener la actual)';
             passInput.removeAttribute('required');
+            // If editing and role is not admin nor apoyo, hide it completely
+            if (role === 'cliente' || role === 'estudiante') {
+                pwdContainer.style.display = 'none';
+            }
         } else {
             passHelp.innerText = '*';
             passInput.setAttribute('required', 'required');

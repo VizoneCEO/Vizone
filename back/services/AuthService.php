@@ -44,6 +44,13 @@ class AuthService
                 $_SESSION['role'] = $user['role'];
                 $_SESSION['logged_in'] = true;
 
+                // Forzar cambio si la contraseña es la predeterminada "password123"
+                if ($password === 'password123') {
+                    $_SESSION['must_change_password'] = true;
+                } else {
+                    $_SESSION['must_change_password'] = false;
+                }
+
                 return $user; // Éxito
             }
 
@@ -105,7 +112,12 @@ class AuthService
             $insert = $this->db->prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)");
             $result = $insert->execute([$username, $hash, $role]);
 
-            return ['success' => $result, 'message' => $result ? 'Usuario creado correctamente.' : 'Error al guardar.'];
+            if ($result) {
+                $insertedId = $this->db->lastInsertId();
+                return ['success' => true, 'message' => 'Usuario creado correctamente.', 'id' => $insertedId];
+            }
+
+            return ['success' => false, 'message' => 'Error al guardar.'];
         } catch (PDOException $e) {
             error_log("CreateUser Error: " . $e->getMessage());
             return ['success' => false, 'message' => 'Error de base de datos.'];
@@ -203,6 +215,38 @@ class AuthService
             session_start();
         }
         return isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true;
+    }
+
+    /**
+     * Resetea la contraseña de un usuario a 'password123'
+     */
+    public function resetPassword($user_id)
+    {
+        try {
+            $hash = password_hash('password123', PASSWORD_DEFAULT);
+            $stmt = $this->db->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
+            $result = $stmt->execute([$hash, $user_id]);
+            return ['success' => $result, 'message' => 'Contraseña reestablecida a temporal.'];
+        } catch (PDOException $e) {
+            error_log("ResetPassword Error: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Error de base de datos.'];
+        }
+    }
+
+    /**
+     * Actualiza solo la contraseña del usuario (cambio forzado)
+     */
+    public function forceUpdatePassword($user_id, $newPassword)
+    {
+        try {
+            $hash = password_hash($newPassword, PASSWORD_DEFAULT);
+            $stmt = $this->db->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
+            $result = $stmt->execute([$hash, $user_id]);
+            return ['success' => $result, 'message' => 'Contraseña actualizada correctamente.'];
+        } catch (PDOException $e) {
+            error_log("ForceUpdatePassword Error: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Error de base de datos.'];
+        }
     }
 }
 ?>

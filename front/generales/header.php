@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= isset($pageTitle) ? htmlspecialchars($pageTitle) : 'Vizone Web | Resultados Tangibles' ?></title>
 
-    <!-- Bootstrap 5 CSS -->
+    <!-- Bootstrap 5 CSS (kept for grid system) -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
         integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
 
@@ -18,203 +18,261 @@
 
     <!-- Custom styles -->
     <style>
-        /* Tipografía Sans-serif limpia estilo Apple */
         :root {
             --bs-font-sans-serif: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            --vizone-bg: #fafafa;
+            --vizone-bg: #050505;
             --vizone-dark: #0a0a0a;
-            /* Aún más oscuro para el theme premium */
             --vizone-accent: #00d2ff;
-            /* Azul eléctrico / cyber para contraste */
-            --vizone-accent-hover: #00b8e6;
         }
 
         body {
             background-color: var(--vizone-bg);
-            color: var(--vizone-dark);
+            color: #ffffff;
             font-family: var(--bs-font-sans-serif);
             -webkit-font-smoothing: antialiased;
         }
 
-        /* Navbar para el tema oscuro (Hero) */
-        .navbar-dark-custom {
-            background-color: rgba(10, 10, 10, 0.85);
-            /* Coincide con el fondo oscuro */
+        /* Nav Glassmorphism Premium (Fijo en el Footer) */
+        .glass-nav {
+            position: fixed;
+            bottom: 0;
+            top: auto;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+            background: rgba(5, 5, 5, 0.4);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            border-top: 1px solid rgba(255, 255, 255, 0.05); /* Borde superior en lugar de inferior */
+            transition: all 0.3s ease;
         }
 
-        .navbar-dark-custom .navbar-brand {
-            color: #ffffff;
+        .glass-nav-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .glass-nav .logo {
+            font-size: 1.5rem;
             font-weight: 700;
+            color: #fff;
+            text-decoration: none;
             letter-spacing: -0.5px;
         }
-
-        .navbar-dark-custom .navbar-brand span {
+        .glass-nav .logo span {
             color: rgba(255, 255, 255, 0.5);
+            font-weight: 400;
         }
 
-        .navbar-dark-custom .nav-link {
-            font-weight: 500;
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 2.5rem;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .nav-link-item {
+            position: relative;
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
             font-size: 0.9rem;
-            color: rgba(255, 255, 255, 0.7) !important;
+            font-weight: 400;
             transition: color 0.3s ease;
         }
 
-        .navbar-dark-custom .nav-link:hover {
-            color: #ffffff !important;
+        .nav-link-item:hover {
+            color: #fff;
         }
 
-        .navbar-dark-custom .navbar-toggler-icon {
-            filter: invert(1);
-        }
-
-        /* Botón Primario Custom (Acento) */
-        .btn-custom-primary {
-            border-radius: 50px;
-            padding: 0.8rem 2rem;
-            font-weight: 600;
-            font-size: 0.95rem;
-            background-color: var(--vizone-accent);
-            color: var(--vizone-dark);
-            transition: all 0.3s ease;
-            border: none;
-            box-shadow: 0 4px 15px rgba(0, 210, 255, 0.3);
-        }
-
-        .btn-custom-primary:hover {
-            background-color: var(--vizone-accent-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 210, 255, 0.4);
-            color: var(--vizone-dark);
-        }
-
-        /* Botón Secundario Oscuro (Para el Hero) */
-        .btn-outline-custom {
-            border-radius: 50px;
-            padding: 0.8rem 2rem;
-            font-weight: 500;
-            font-size: 0.95rem;
-            background-color: rgba(255, 255, 255, 0.05);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            transition: all 0.3s ease;
-        }
-
-        .btn-outline-custom:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-            color: white;
-            border-color: rgba(255, 255, 255, 0.4);
-        }
-
-        /* Hero Glow Effect */
-        .hero-glow-bg {
-            background-color: var(--vizone-dark);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .hero-glow-bg::before {
+        /* Hover animation Stripe/Apple style (Desktop only effectively) */
+        .nav-link-item::after {
             content: '';
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 80vw;
-            height: 80vw;
-            max-width: 800px;
-            max-height: 800px;
-            background: radial-gradient(circle, rgba(0, 210, 255, 0.15) 0%, rgba(10, 10, 10, 0) 70%);
-            pointer-events: none;
-            z-index: 0;
+            bottom: -5px;
+            left: 0;
+            width: 100%;
+            height: 1px;
+            background-color: #fff;
+            transform: scaleX(0);
+            transform-origin: center;
+            transition: transform 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
         }
 
-        /* Servicio Card Hover Effect */
-        .service-card {
-            transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
-            border: 1px solid rgba(0, 0, 0, 0.05);
+        .nav-link-item:hover::after {
+            transform: scaleX(1);
+        }
+        
+        .portal-link {
+            color: var(--vizone-accent);
+            font-weight: 500;
+        }
+        .portal-link::after {
+            background-color: var(--vizone-accent);
         }
 
-        .service-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08) !important;
-            border-color: rgba(0, 210, 255, 0.2);
-        }
-
-        .service-card.highlight {
+        /* CTA Botón Nav (Desktop) */
+        .nav-cta {
+            background: rgba(0, 210, 255, 0.1);
             border: 1px solid rgba(0, 210, 255, 0.3);
-            background: linear-gradient(to bottom, #ffffff, #fdfdfd);
+            color: #fff;
+            padding: 0.6rem 1.5rem;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 210, 255, 0);
         }
 
-        .service-card.highlight:hover {
+        .nav-cta:hover {
+            background: rgba(0, 210, 255, 0.2);
             border-color: var(--vizone-accent);
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(0, 210, 255, 0.2);
+            transform: translateY(-1px);
         }
 
-        /* Botón Flotante de WhatsApp */
+        /* Helpers for Mobile/Desktop Elements */
+        @media (min-width: 769px) {
+            .mobile-icon { display: none !important; }
+            .mobile-text { display: none !important; }
+        }
+
+        /* =======================================
+           MOBILE BOTTOM FOOTER NAVIGATION
+           ======================================= */
+        @media (max-width: 768px) {
+            .desktop-icon { display: none !important; }
+            .desktop-text { display: none !important; }
+            
+            .text-accent { color: var(--vizone-accent) !important; }
+            
+            .glass-nav {
+                /* El logo sube de regreso al top en móvil para mantenerlo visible */
+                bottom: auto;
+                top: 0;
+                background: transparent;
+                backdrop-filter: none;
+                -webkit-backdrop-filter: none;
+                border-top: none;
+                pointer-events: none;
+            }
+            .glass-nav .logo {
+                pointer-events: auto;
+            }
+            .glass-nav-container {
+                justify-content: center;
+                padding-top: 20px;
+            }
+
+            .nav-links {
+                position: fixed;
+                bottom: 0; /* Fijo al ras del footer */
+                left: 0;
+                transform: none;
+                width: 100%;
+                max-width: none;
+                background: rgba(8, 8, 8, 0.9); /* Más sólido para mejor lectura en footer */
+                backdrop-filter: blur(25px);
+                -webkit-backdrop-filter: blur(25px);
+                border-radius: 0; /* Pierde la cápsula, se vuelve barra total */
+                border-top: 1px solid rgba(255, 255, 255, 0.08); /* Línea divisoria */
+                display: flex;
+                flex-direction: row;
+                justify-content: space-evenly;
+                align-items: center;
+                /* Soporte para el notch/safe area en iOS */
+                padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); 
+                box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.5); /* Sombra hacia arriba */
+                z-index: 1001;
+                pointer-events: auto;
+            }
+            .nav-links li {
+                flex: 1;
+                display: flex;
+                justify-content: center;
+            }
+            .nav-link-item, .nav-cta {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                font-size: 0.65rem !important;
+                padding: 0 !important;
+                background: transparent !important;
+                border: none !important;
+                box-shadow: none !important;
+                line-height: 1.2;
+                letter-spacing: 0.3px;
+                font-weight: 300 !important;
+                opacity: 0.6;
+                transition: opacity 0.2s ease;
+            }
+            .nav-cta {
+                opacity: 0.9;
+                font-weight: 500 !important;
+            }
+            .nav-link-item:hover, .nav-link-item:active, .nav-cta:hover, .nav-cta:active {
+                opacity: 1;
+            }
+            .mobile-icon {
+                font-size: 1.3rem;
+                margin-bottom: 4px;
+                display: block !important;
+                transition: transform 0.2s ease;
+            }
+            .nav-link-item:active .mobile-icon, .nav-cta:active .mobile-icon {
+                transform: scale(0.9); /* Micro-interacción touch */
+            }
+            .nav-link-item::after { display: none !important; }
+        }
+
+        /* Ajuste de Whatsapp para el Footer Fijo */
         .whatsapp-float {
             position: fixed;
-            width: 60px;
-            height: 60px;
-            bottom: 30px;
+            width: 50px;
+            height: 50px;
+            bottom: 90px; /* Separado del desktop footer nav */
             right: 30px;
-            background-color: #25d366;
+            background-color: rgba(37, 211, 102, 0.8);
+            backdrop-filter: blur(5px);
             color: #FFF;
             border-radius: 50px;
             text-align: center;
-            font-size: 30px;
-            box-shadow: 0px 4px 15px rgba(37, 211, 102, 0.4);
+            font-size: 24px;
             z-index: 1000;
             display: flex;
             align-items: center;
             justify-content: center;
             text-decoration: none !important;
             transition: all 0.3s ease;
-            animation: pulse-whatsapp 2s infinite;
+            border: 1px solid rgba(255,255,255,0.1);
         }
-
         .whatsapp-float:hover {
             color: white;
-            transform: scale(1.1);
-            background-color: #20b858;
-            box-shadow: 0px 6px 20px rgba(37, 211, 102, 0.6);
-            animation: none;
-            /* Se detiene al hacer hover */
+            background-color: rgba(37, 211, 102, 1);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(37, 211, 102, 0.3);
         }
 
-        .whatsapp-float i {
-            margin-top: 2px;
-        }
-
-        @keyframes pulse-whatsapp {
-            0% {
-                transform: scale(0.95);
-                box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.7);
-            }
-
-            70% {
-                transform: scale(1);
-                box-shadow: 0 0 0 15px rgba(37, 211, 102, 0);
-            }
-
-            100% {
-                transform: scale(0.95);
-                box-shadow: 0 0 0 0 rgba(37, 211, 102, 0);
-            }
-        }
-
-        /* Ocultar en móviles muy pequeños para no estorbar (opcional, ajustado a <=350px) */
-        @media screen and (max-width: 350px) {
+        /* En móvil alzamos whastapp un poco más para librar el nuevo footer fijo */
+        @media (max-width: 768px) {
             .whatsapp-float {
-                width: 50px;
-                height: 50px;
-                bottom: 15px;
-                right: 15px;
-                font-size: 25px;
+                bottom: calc(90px + env(safe-area-inset-bottom));
+                right: 20px;
+                width: 45px;
+                height: 45px;
+                font-size: 20px;
             }
         }
 
-        /* Espaciado General */
+        /* General sections spacing */
         section {
             padding: 6rem 0;
         }
@@ -223,42 +281,58 @@
 
 <body>
 
-    <!-- Header / Navbar -->
-    <nav class="navbar navbar-expand-lg fixed-top navbar-dark-custom py-3">
-        <div class="container">
-            <a class="navbar-brand" href="/vizone/">
-                Vizone<span class="fw-normal">Web</span>
+    <!-- Header Glassmorphism Premium -->
+    <nav class="glass-nav">
+        <div class="glass-nav-container">
+            <a class="logo" href="<?= defined('BASE_URL') ? BASE_URL : '/' ?>">
+                Vizone<span>Web</span>
             </a>
 
-            <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse"
-                data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false"
-                aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-
-            <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
-                <ul class="navbar-nav align-items-lg-center gap-3">
-                    <li class="nav-item">
-                        <a class="nav-link" href="#enfoque">Enfoque</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#servicios">Servicios</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link fw-semibold d-flex align-items-center gap-1" href="/vizone/login"
-                            style="color: var(--vizone-accent) !important;">
-                            <i class="bi bi-person-fill"></i> Portal Vizone
-                        </a>
-                    </li>
-                    <li class="nav-item ms-lg-2 mt-3 mt-lg-0">
-                        <!-- En el navbar usamos un botón acorde al header oscuro -->
-                        <a class="btn btn-custom-primary btn-sm w-100 px-4 py-2" style="font-size: 0.85rem;"
-                            href="#auditoria">Empezar ahora</a>
-                    </li>
-                </ul>
-            </div>
+            <!-- Dock Navigation -->
+            <ul class="nav-links" id="nav-links">
+                <li>
+                    <a class="nav-link-item" href="<?= defined('BASE_URL') ? BASE_URL : '/' ?>#esencia">
+                        <i class="bi bi-layers mobile-icon"></i>
+                        <span class="nav-item-text desktop-text">Nuestra Esencia</span>
+                        <span class="nav-item-text mobile-text">Esencia</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="nav-link-item" href="<?= defined('BASE_URL') ? BASE_URL : '/' ?>#academy">
+                        <i class="bi bi-journal-code mobile-icon"></i>
+                        <span class="nav-item-text desktop-text">Academy</span>
+                        <span class="nav-item-text mobile-text">Academy</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="nav-link-item" href="<?= defined('BASE_URL') ? BASE_URL : '/' ?>proyectos">
+                        <i class="bi bi-briefcase mobile-icon"></i>
+                        <span class="nav-item-text desktop-text">Proyectos</span>
+                        <span class="nav-item-text mobile-text">Proyectos</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="nav-link-item portal-link" href="<?= defined('BASE_URL') ? BASE_URL : '/' ?>login">
+                        <i class="bi bi-person-circle mobile-icon"></i>
+                        <i class="bi bi-person-fill desktop-icon"></i>
+                        <span class="nav-item-text">Portal</span>
+                    </a>
+                </li>
+                <li>
+                    <a class="nav-cta" href="<?= defined('BASE_URL') ? BASE_URL : '/' ?>#auditoria">
+                        <i class="bi bi-calendar-check-fill mobile-icon text-accent" style="filter: drop-shadow(0 0 5px rgba(0,210,255,0.4));"></i>
+                        <span class="nav-item-text desktop-text">Empezar ahora</span>
+                        <span class="nav-item-text mobile-text text-accent">Agendar</span>
+                    </a>
+                </li>
+            </ul>
         </div>
     </nav>
+
+    <!-- Botón Whatsapp Opcional Reducido -->
+    <a href="https://wa.me/525598793460?text=Hola,%20Vizoneweb." class="whatsapp-float" target="_blank" rel="noopener noreferrer">
+        <i class="bi bi-whatsapp"></i>
+    </a>
 
     <!-- Inicia Contenido Principal -->
     <main>

@@ -1,5 +1,6 @@
 RewriteEngine On
-RewriteBase /vizone/
+# En producción (raíz) no necesitas RewriteBase. En local XAMPP Apache suele auto-detectarlo.
+# RewriteBase /vizone/
 
 # Si es un archivo o directorio real que existe, no lo reescribas
 RewriteCond %{REQUEST_FILENAME} !-f

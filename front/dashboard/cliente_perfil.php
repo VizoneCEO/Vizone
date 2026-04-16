@@ -16,15 +16,15 @@
             </p>
         </div>
         <div>
-            <!-- Botón para Editar Info General (Pendiente de implementar) -->
-            <button class="btn btn-light border text-secondary shadow-sm"><i class="bi bi-gear"></i> Ajustes</button>
+            <!-- Botón para Editar Info General -->
+            <button class="btn btn-light border text-secondary shadow-sm" data-bs-toggle="modal" data-bs-target="#editClientProfileModal"><i class="bi bi-gear"></i> Ajustes</button>
         </div>
     </div>
 </div>
 
 <div class="row g-4">
-    <!-- COLUMNA IZQUIERDA: Tarjetas Finanzas y Servicios -->
-    <div class="col-lg-8">
+    <!-- COLUMNA PRINCIPAL: Servicios y Pagos (Pantalla Completa) -->
+    <div class="col-12">
 
         <!-- Header Seccion Proyectos -->
         <div class="d-flex justify-content-between align-items-end mb-3 mt-2">
@@ -74,7 +74,8 @@
                                     'mensualidad_financiamiento' => $srv['mensualidad_financiamiento'] ?? 0,
                                     'es_recurrente' => $srv['es_recurrente'] ?? 0,
                                     'frecuencia_pago' => $srv['frecuencia_pago'] ?? 'ninguno',
-                                    'fecha_proximo_pago' => $srv['fecha_proximo_pago'] ?? ''
+                                    'fecha_proximo_pago' => $srv['fecha_proximo_pago'] ?? '',
+                                    'incluye_iva' => $srv['incluye_iva'] ?? 0
                                 ]), ENT_QUOTES, 'UTF-8');
                                 ?>
                                 <li><a class="dropdown-item small text-secondary btn-edit-service" href="#" data-raw="<?= $svcDataRaw ?>"><i
@@ -84,7 +85,11 @@
                                 </li>
                                 <li><a class="dropdown-item small text-success btn-add-pago" href="#" 
                                         data-servicio-id="<?= $srv['id'] ?>"
-                                        data-nombre="<?= htmlspecialchars($srv['nombre_proyecto']) ?>">
+                                        data-nombre="<?= htmlspecialchars($srv['nombre_proyecto']) ?>"
+                                        data-tipo="<?= $srv['tipo_pago'] ?>"
+                                        data-anticipo="<?= $srv['pago_inicial'] * (($srv['incluye_iva'] ?? 0) ? 1.16 : 1) ?>"
+                                        data-iva="<?= $srv['incluye_iva'] ?? 0 ?>"
+                                        data-amortizaciones='<?= htmlspecialchars(json_encode($srv['amortizaciones'] ?? []), ENT_QUOTES, 'UTF-8') ?>'>
                                     <i class="bi bi-cash-coin me-2"></i>Registrar Pago
                                 </a></li>
                                 <li>
@@ -102,14 +107,33 @@
                                     <p class="text-primary small fw-bold text-uppercase mb-2">
                                         <?= htmlspecialchars($srv['tipo_servicio'] ?? 'Servicio') ?>
                                     </p>
+                                    <?php 
+                                        $costo_base = $srv['costo_total'];
+                                        $iva_monto = 0;
+                                        if (($srv['incluye_iva'] ?? 0) == 1) {
+                                            $iva_monto = $costo_base * 0.16;
+                                        }
+                                        $total_general = $costo_base + $iva_monto;
+                                        $restante = max(0, $total_general - $srv['total_pagado']);
+                                    ?>
                                     <div class="d-flex justify-content-between mb-1">
-                                        <span class="text-secondary small">Costo Total:</span>
-                                        <span class="fw-semibold text-dark">$<?= number_format($srv['costo_total'], 2) ?></span>
+                                        <span class="text-secondary small">Subtotal:</span>
+                                        <span class="fw-semibold text-dark">$<?= number_format($costo_base, 2) ?></span>
+                                    </div>
+                                    <?php if ($iva_monto > 0): ?>
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span class="text-secondary small">I.V.A (16%):</span>
+                                        <span class="fw-semibold text-primary">+$<?= number_format($iva_monto, 2) ?></span>
+                                    </div>
+                                    <?php endif; ?>
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span class="text-secondary small fw-bold">Costo Neto:</span>
+                                        <span class="fw-bold text-dark">$<?= number_format($total_general, 2) ?></span>
                                     </div>
 
-                                    <div class="d-flex justify-content-between mb-1">
-                                        <span class="text-secondary small">Anticipo Acordado:</span>
-                                        <span class="text-secondary fw-medium">$<?= number_format($srv['pago_inicial'], 2) ?></span>
+                                    <div class="d-flex justify-content-between mb-1 mt-2">
+                                        <span class="text-secondary small">Anticipo Original:</span>
+                                        <span class="text-secondary fw-medium">$<?= number_format($srv['pago_inicial'] * ($srv['incluye_iva'] ? 1.16 : 1), 2) ?></span>
                                     </div>
                                     <div class="d-flex justify-content-between">
                                         <span class="text-secondary small">Total Pagado:</span>
@@ -120,12 +144,12 @@
                                     <div class="d-flex justify-content-between">
                                         <span class="text-secondary small">Restante a Liquidar:</span>
                                         <span
-                                            class="<?= ($srv['costo_total'] - $srv['total_pagado']) > 0 ? 'text-danger' : 'text-success' ?> fw-medium">
-                                            $<?= number_format(max(0, $srv['costo_total'] - $srv['total_pagado']), 2) ?>
+                                            class="<?= $restante > 0 ? 'text-danger' : 'text-success' ?> fw-medium">
+                                            $<?= number_format($restante, 2) ?>
                                         </span>
                                     </div>
 
-                                    <?php if (($srv['costo_total'] - $srv['total_pagado']) <= 0): ?>
+                                    <?php if ($restante <= 0): ?>
                                         <div class="d-flex justify-content-between mt-2 pt-2 border-top">
                                             <span class="text-secondary small"><i
                                                     class="bi bi-check-circle-fill text-success me-1"></i>Totalmente
@@ -146,18 +170,58 @@
                                                     class="fw-bold"><?= $srv['meses_financiamiento'] ?> meses
                                                     previstos</span>)</span>
                                             <span
-                                                class="h5 fw-bold text-dark mb-0">$<?= number_format($srv['mensualidad_financiamiento'], 2) ?>
-                                                <span class="text-muted fs-6 fw-normal">/ mes</span>
+                                                class="h5 fw-bold text-dark mb-0">$<?= number_format($srv['mensualidad_financiamiento'] * ($srv['incluye_iva'] ? 1.16 : 1), 2) ?>
+                                                <span class="text-muted fs-6 fw-normal">/ mes <?= $srv['incluye_iva'] ? '(IVA incl.)' : '' ?></span>
                                             </span>
-                                            <?php if (!empty($srv['fecha_proximo_pago'])): ?>
-                                                <span class="d-block text-primary small mt-1"><i class="bi bi-calendar me-1"></i>Próximo Pago: <?= htmlspecialchars($srv['fecha_proximo_pago']) ?></span>
+                                            
+                                            <?php 
+                                            // Vencimientos alert
+                                            $vencidas = 0;
+                                            if (!empty($srv['amortizaciones'])) {
+                                                foreach($srv['amortizaciones'] as $am) {
+                                                    if($am['es_vencido']) $vencidas++;
+                                                }
+                                            }
+                                            if ($vencidas > 0): ?>
+                                                <div class="alert alert-danger py-1 px-2 mt-2 mb-1 small d-inline-block shadow-sm">
+                                                    <i class="bi bi-exclamation-triangle-fill me-1"></i> <strong><?= $vencidas ?> pago(s) vencido(s)</strong>
+                                                </div>
+                                            <?php endif; ?>
+
+                                            <?php
+                                            // Calcular dinámicamente el próximo pago pendiente o vencido
+                                            $proximo_pago_fecha = null;
+                                            $proximo_pago_vencido = false;
+                                            if (!empty($srv['amortizaciones'])) {
+                                                foreach ($srv['amortizaciones'] as $am) {
+                                                    if ($am['estado'] !== 'pagado') {
+                                                        $proximo_pago_fecha = $am['fecha_esperada'];
+                                                        $proximo_pago_vencido = (bool)$am['es_vencido'];
+                                                        break; // primera pendiente/vencida
+                                                    }
+                                                }
+                                            }
+                                            // fallback al campo estático si no hay amortizaciones
+                                            if (!$proximo_pago_fecha && !empty($srv['fecha_proximo_pago'])) {
+                                                $proximo_pago_fecha = $srv['fecha_proximo_pago'];
+                                            }
+                                            ?>
+                                            <?php if ($proximo_pago_fecha): ?>
+                                                <span class="d-block <?= $proximo_pago_vencido ? 'text-danger fw-bold' : 'text-primary' ?> small mt-1">
+                                                    <i class="bi bi-calendar<?= $proximo_pago_vencido ? '-x' : '' ?> me-1"></i>
+                                                    <?= $proximo_pago_vencido ? 'Vencido: ' : 'Próximo Pago: ' ?>
+                                                    <?= htmlspecialchars($proximo_pago_fecha) ?>
+                                                </span>
                                             <?php endif; ?>
                                             
                                             <!-- Boton para Amortizacion Card -->
                                             <button class="btn btn-sm btn-outline-primary mt-2 shadow-sm w-100 btn-view-amortization" 
                                                     data-costo="<?= $srv['costo_total'] ?>"
                                                     data-anticipo="<?= $srv['pago_inicial'] ?>"
-                                                    data-mensualidad="<?= $srv['mensualidad_financiamiento'] ?>">
+                                                    data-mensualidad="<?= $srv['mensualidad_financiamiento'] ?>"
+                                                    data-iva="<?= $srv['incluye_iva'] ?>"
+                                                    data-fecha="<?= $srv['fecha_proximo_pago'] ?>"
+                                                    data-amortizaciones="<?= htmlspecialchars(json_encode($srv['amortizaciones'] ?? [])) ?>">
                                                 <i class="bi bi-table me-1"></i> Ver Tabla de Amortización
                                             </button>
                                         </div>
@@ -204,6 +268,7 @@
                                                             <thead class="table-light text-muted small">
                                                                 <tr>
                                                                     <th>Fecha</th>
+                                                                    <th>Concepto</th>
                                                                     <th>Monto</th>
                                                                     <th>Método</th>
                                                                     <th>Ref.</th>
@@ -214,13 +279,61 @@
                                                                 <?php foreach ($srv['pagos_historial'] as $pago): ?>
                                                                     <tr>
                                                                         <td><?= htmlspecialchars($pago['fecha_pago']) ?></td>
+                                                                        <td class="text-primary fw-medium"><?= htmlspecialchars($pago['concepto'] ?? 'Abono General') ?></td>
                                                                         <td class="text-success fw-medium">$<?= number_format($pago['monto_pagado'], 2) ?></td>
                                                                         <td><?= htmlspecialchars($pago['metodo_pago']) ?></td>
                                                                         <td class="text-muted"><?= htmlspecialchars($pago['referencia'] ?: '--') ?></td>
-                                                                        <td>
-                                                                            <button class="btn btn-sm text-danger shadow-none btn-delete-pago" data-id="<?= $pago['id'] ?>" title="Revocar Pago">
-                                                                                <i class="bi bi-x-circle-fill"></i>
-                                                                            </button>
+                                                                        <td class="text-center">
+                                                                            <div class="d-flex gap-1 justify-content-center align-items-center flex-nowrap">
+                                                                                <!-- Editar Pago -->
+                                                                                <button class="btn btn-sm btn-outline-warning py-0 px-2 shadow-none btn-edit-pago"
+                                                                                        title="Editar Pago"
+                                                                                        data-id="<?= $pago['id'] ?>"
+                                                                                        data-monto="<?= $pago['monto_pagado'] ?>"
+                                                                                        data-concepto="<?= htmlspecialchars($pago['concepto'] ?? '') ?>"
+                                                                                        data-fecha="<?= $pago['fecha_pago'] ?>"
+                                                                                        data-metodo="<?= htmlspecialchars($pago['metodo_pago'] ?? '') ?>"
+                                                                                        data-referencia="<?= htmlspecialchars($pago['referencia'] ?? '') ?>">
+                                                                                    <i class="bi bi-pencil-fill"></i>
+                                                                                </button>
+                                                                                <!-- Comprobante (siempre visible) -->
+                                                                                <?php if (!empty($pago['comprobante_url'])): ?>
+                                                                                    <a href="<?= '/vizone/back/uploads/' . $pago['comprobante_url'] ?>" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2 shadow-none" title="Ver Comprobante">
+                                                                                        <i class="bi bi-file-earmark-image"></i>
+                                                                                    </a>
+                                                                                <?php else: ?>
+                                                                                    <button class="btn btn-sm btn-outline-secondary py-0 px-2 shadow-none btn-upload-comprobante"
+                                                                                            data-pago-id="<?= $pago['id'] ?>" title="Subir Comprobante de Pago">
+                                                                                        <i class="bi bi-file-earmark-image text-primary opacity-50"></i>
+                                                                                    </button>
+                                                                                <?php endif; ?>
+                                                                                <!-- Factura PDF -->
+                                                                                <?php if (!empty($pago['factura_pdf_url'])): ?>
+                                                                                    <a href="<?= '/vizone/back/uploads/' . $pago['factura_pdf_url'] ?>" target="_blank" class="btn btn-sm btn-outline-danger py-0 px-2 shadow-none" title="Ver Factura PDF">
+                                                                                        <i class="bi bi-file-earmark-pdf"></i>
+                                                                                    </a>
+                                                                                <?php else: ?>
+                                                                                    <button class="btn btn-sm btn-outline-secondary py-0 px-2 shadow-none btn-upload-factura" 
+                                                                                            data-pago-id="<?= $pago['id'] ?>" data-tipo="pdf" title="Subir Factura PDF">
+                                                                                        <i class="bi bi-file-earmark-pdf text-danger opacity-50"></i>
+                                                                                    </button>
+                                                                                <?php endif; ?>
+                                                                                <!-- Factura XML -->
+                                                                                <?php if (!empty($pago['factura_xml_url'])): ?>
+                                                                                    <a href="<?= '/vizone/back/uploads/' . $pago['factura_xml_url'] ?>" target="_blank" class="btn btn-sm btn-outline-success py-0 px-2 shadow-none" title="Ver XML CFDI">
+                                                                                        <i class="bi bi-filetype-xml"></i>
+                                                                                    </a>
+                                                                                <?php else: ?>
+                                                                                    <button class="btn btn-sm btn-outline-secondary py-0 px-2 shadow-none btn-upload-factura" 
+                                                                                            data-pago-id="<?= $pago['id'] ?>" data-tipo="xml" title="Subir XML CFDI">
+                                                                                        <i class="bi bi-filetype-xml text-success opacity-50"></i>
+                                                                                    </button>
+                                                                                <?php endif; ?>
+                                                                                <!-- Eliminar -->
+                                                                                <button class="btn btn-sm text-danger shadow-none btn-delete-pago py-0 px-2" data-id="<?= $pago['id'] ?>" title="Revocar Pago">
+                                                                                    <i class="bi bi-x-circle-fill"></i>
+                                                                                </button>
+                                                                            </div>
                                                                         </td>
                                                                     </tr>
                                                                 <?php endforeach; ?>
@@ -242,53 +355,52 @@
         <?php endif; ?>
     </div>
 
-    <!-- COLUMNA DERECHA: Documentos y Accesos -->
-    <div class="col-lg-4">
-        <!-- Credenciales Portald del Cliente -->
-        <div class="card border-0 shadow-sm rounded-4 mb-4 bg-dark text-white text-center p-4"
-            style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);">
-            <i class="bi bi-shield-lock display-5 text-primary mb-2"></i>
-            <h6 class="fw-bold">Acceso Visión</h6>
-            <p class="small text-white-50 mb-3">Las credenciales que el cliente usa para entrar aquí.</p>
-            <div class="bg-black bg-opacity-25 rounded-3 p-2 font-monospace text-info">
-                User: <?= htmlspecialchars($cliente['username']) ?>
+    <!-- FILA INFERIOR: Credenciales y Documentos -->
+    <div class="col-12">
+        <div class="row g-4">
+            <!-- Credenciales Portal del Cliente -->
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm rounded-4 bg-dark text-white text-center p-4 h-100"
+                    style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);">
+                    <i class="bi bi-shield-lock display-5 text-primary mb-2"></i>
+                    <h6 class="fw-bold">Acceso Visión</h6>
+                    <p class="small text-white-50 mb-3">Las credenciales que el cliente usa para entrar aquí.</p>
+                    <div class="bg-black bg-opacity-25 rounded-3 p-2 font-monospace text-info">
+                        User: <?= htmlspecialchars($cliente['username']) ?>
+                    </div>
+                    <button class="btn btn-sm btn-outline-light mt-3 rounded-pill px-3 opacity-75" id="btnResetPassword">Reestablecer Password</button>
+                </div>
             </div>
-            <button class="btn btn-sm btn-outline-light mt-3 rounded-pill px-3 opacity-75">Reestablecer
-                Password</button>
-        </div>
 
-        <!-- Archivos y Manuales -->
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-header bg-white border-bottom pt-4 px-4 pb-3">
-                <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-file-earmark-richtext text-primary me-2"></i>Archivos
-                    y Manuales</h6>
-            </div>
-            <div class="card-body p-0">
-                <ul class="list-group list-group-flush">
-                    <?php if (empty($cliente['documentos'])): ?>
-                        <li class="list-group-item text-center p-4 text-muted small border-bottom-0 rounded-bottom-4">
-                            No hay manuales cargados.
-                        </li>
-                    <?php else: ?>
-                        <?php foreach ($cliente['documentos'] as $doc): ?>
-                            <li
-                                class="list-group-item px-4 py-3 d-flex justify-content-between align-items-center header-menu shadow-hover-sm transition-all">
-                                <div class="text-truncate flex-grow-1 me-3">
-                                    <h6 class="mb-0 text-dark fs-6 text-truncate"><i
-                                            class="bi bi-file-pdf text-danger me-2"></i><?= htmlspecialchars($doc['nombre_original']) ?>
-                                    </h6>
-                                    <small class="text-muted"><?= date('d/m/Y', strtotime($doc['uploaded_at'])) ?></small>
-                                </div>
-                                <a href="#" class="btn btn-sm btn-light border rounded-circle"><i
-                                        class="bi bi-download text-primary"></i></a>
-                            </li>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </ul>
-            </div>
-            <div class="card-footer bg-light border-top-0 p-3 rounded-bottom-4 text-center">
-                <button class="btn btn-sm btn-secondary w-100 shadow-sm" data-bs-toggle="modal"
-                    data-bs-target="#newDocumentModal"><i class="bi bi-cloud-arrow-up me-1"></i> Subir Archivo</button>
+            <!-- Archivos y Manuales -->
+            <div class="col-md-9">
+                <div class="card border-0 shadow-sm rounded-4 mb-4">
+                    <div class="card-header bg-white border-bottom pt-4 px-4 pb-3">
+                        <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-file-earmark-richtext text-primary me-2"></i>Archivos y Manuales</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <ul class="list-group list-group-flush">
+                            <?php if (empty($cliente['documentos'])): ?>
+                                <li class="list-group-item text-center p-4 text-muted small border-bottom-0 rounded-bottom-4">
+                                    No hay manuales cargados.
+                                </li>
+                            <?php else: ?>
+                                <?php foreach ($cliente['documentos'] as $doc): ?>
+                                    <li class="list-group-item px-4 py-3 d-flex justify-content-between align-items-center header-menu shadow-hover-sm transition-all">
+                                        <div class="text-truncate flex-grow-1 me-3">
+                                            <h6 class="mb-0 text-dark fs-6 text-truncate"><i class="bi bi-file-pdf text-danger me-2"></i><?= htmlspecialchars($doc['nombre_original']) ?></h6>
+                                            <small class="text-muted"><?= date('d/m/Y', strtotime($doc['uploaded_at'])) ?></small>
+                                        </div>
+                                        <a href="#" class="btn btn-sm btn-light border rounded-circle"><i class="bi bi-download text-primary"></i></a>
+                                    </li>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </ul>
+                    </div>
+                    <div class="card-footer bg-light border-top-0 p-3 rounded-bottom-4 text-center">
+                        <button class="btn btn-sm btn-secondary w-100 shadow-sm" data-bs-toggle="modal" data-bs-target="#newDocumentModal"><i class="bi bi-cloud-arrow-up me-1"></i> Subir Archivo</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -337,7 +449,13 @@
 
                     <!-- Paso 2: Esquema de Pago -->
                     <div class="mb-4">
-                        <h6 class="fw-bold text-primary mb-3 border-bottom pb-2">2. Finanzas y Pagos</h6>
+                        <div class="d-flex justify-content-between align-items-center border-bottom mb-3 pb-2">
+                            <h6 class="fw-bold text-primary mb-0">2. Finanzas y Pagos</h6>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input shadow-none" type="checkbox" name="incluye_iva" id="incluyeIva" value="1">
+                                <label class="form-check-label small fw-bold text-primary" for="incluyeIva">Aplicar +16% I.V.A.</label>
+                            </div>
+                        </div>
                         <label class="form-label small fw-medium text-muted">A. ¿Cómo se pagará este servicio? *</label>
                         <div class="d-flex gap-3 mb-3">
                             <div class="form-check">
@@ -385,6 +503,16 @@
                                 <label class="form-label small fw-medium text-muted">Próximo Pago</label>
                                 <input type="date" class="form-control shadow-none" name="fecha_proximo_pago_unico">
                             </div>
+                            <div class="col-12 mt-2 pt-2 border-top">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-secondary small fw-medium">Desglose (Subtotal vs IVA)</span>
+                                    <div class="text-end">
+                                        <span class="d-block small text-muted" id="breakdownUnicoSubtotal">Subtotal: $0.00</span>
+                                        <span class="d-block small text-muted text-primary" id="breakdownUnicoIva" style="display:none;">+ I.V.A. (16%): $0.00</span>
+                                        <span class="fw-bold text-dark h6 mb-0" id="breakdownUnicoTotal">Costo Neto: $0.00</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Contenedor: Varios Pagos -->
@@ -418,6 +546,16 @@
                                 <button type="button" class="btn btn-sm btn-outline-primary shadow-sm"
                                     id="btnAmortizacion">Ver Tabla de Amortización</button>
                             </div>
+                            <div class="col-12 mt-2 pt-2 border-top">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-secondary small fw-medium">Desglose general del Costo:</span>
+                                    <div class="text-end">
+                                        <span class="d-block small text-muted" id="breakdownVariosSubtotal">Subtotal: $0.00</span>
+                                        <span class="d-block small text-muted text-primary" id="breakdownVariosIva" style="display:none;">+ I.V.A. (16%): $0.00</span>
+                                        <span class="fw-bold text-dark h6 mb-0" id="breakdownVariosTotal">Costo Neto: $0.00</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Tabla Amortizacion -->
@@ -427,7 +565,9 @@
                                 <thead class="table-light text-muted small">
                                     <tr>
                                         <th># Pago</th>
-                                        <th>Monto a Pagar</th>
+                                        <th>Subtotal</th>
+                                        <th>I.V.A (16%)</th>
+                                        <th>Total a Pagar</th>
                                         <th>Saldo Restante</th>
                                     </tr>
                                 </thead>
@@ -488,7 +628,13 @@
                     </div>
 
                     <div class="mb-4">
-                        <h6 class="fw-bold text-primary mb-3 border-bottom pb-2">2. Finanzas y Pagos</h6>
+                        <div class="d-flex justify-content-between align-items-center border-bottom mb-3 pb-2">
+                            <h6 class="fw-bold text-primary mb-0">2. Finanzas y Pagos</h6>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input shadow-none" type="checkbox" name="incluye_iva" id="editIncluyeIva" value="1">
+                                <label class="form-check-label small fw-bold text-primary" for="editIncluyeIva">Aplicar +16% I.V.A.</label>
+                            </div>
+                        </div>
                         <label class="form-label small fw-medium text-muted">A. ¿Cómo se pagará este servicio? *</label>
                         <div class="d-flex gap-3 mb-3">
                             <div class="form-check">
@@ -538,6 +684,16 @@
                                 <input type="date" class="form-control shadow-none" name="fecha_proximo_pago_unico"
                                     id="editFechaUnico">
                             </div>
+                            <div class="col-12 mt-2 pt-2 border-top">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-secondary small fw-medium">Desglose (Subtotal vs IVA)</span>
+                                    <div class="text-end">
+                                        <span class="d-block small text-muted" id="editBreakdownUnicoSubtotal">Subtotal: $0.00</span>
+                                        <span class="d-block small text-muted text-primary" id="editBreakdownUnicoIva" style="display:none;">+ I.V.A. (16%): $0.00</span>
+                                        <span class="fw-bold text-dark h6 mb-0" id="editBreakdownUnicoTotal">Costo Neto: $0.00</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Contenedor Varios -->
@@ -573,6 +729,16 @@
                                 <button type="button" class="btn btn-sm btn-outline-primary shadow-sm"
                                     id="editBtnAmortizacion">Ver Tabla de Amortización</button>
                             </div>
+                            <div class="col-12 mt-2 pt-2 border-top">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-secondary small fw-medium">Desglose general del Costo:</span>
+                                    <div class="text-end">
+                                        <span class="d-block small text-muted" id="editBreakdownVariosSubtotal">Subtotal: $0.00</span>
+                                        <span class="d-block small text-muted text-primary" id="editBreakdownVariosIva" style="display:none;">+ I.V.A. (16%): $0.00</span>
+                                        <span class="fw-bold text-dark h6 mb-0" id="editBreakdownVariosTotal">Costo Neto: $0.00</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Tabla Amortizacion -->
@@ -582,7 +748,9 @@
                                 <thead class="table-light text-muted small">
                                     <tr>
                                         <th># Pago</th>
-                                        <th>Monto a Pagar</th>
+                                        <th>Subtotal</th>
+                                        <th>I.V.A (16%)</th>
+                                        <th>Total a Pagar</th>
                                         <th>Saldo Restante</th>
                                     </tr>
                                 </thead>
@@ -602,6 +770,78 @@
     </div>
 </div>
 
+<!-- Modal Editar Pago -->
+<div class="modal fade" id="editPagoModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-header border-bottom-0 pb-0">
+                <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2 text-warning"></i>Editar Pago</h5>
+                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 pt-3">
+                <input type="hidden" id="editPagoId">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label small fw-medium text-muted">Concepto</label>
+                        <input type="text" class="form-control shadow-none" id="editPagoConcepto" placeholder="Ej: Pago de Mensualidad">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-medium text-muted">Monto ($)</label>
+                        <input type="number" step="0.01" class="form-control shadow-none text-success fw-bold" id="editPagoMonto">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-medium text-muted">Fecha del Pago</label>
+                        <input type="date" class="form-control shadow-none" id="editPagoFecha">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-medium text-muted">Método de Pago</label>
+                        <select class="form-select shadow-none" id="editPagoMetodo">
+                            <option value="Transferencia">Transferencia</option>
+                            <option value="Efectivo">Efectivo</option>
+                            <option value="Tarjeta">Tarjeta / Link</option>
+                            <option value="Cheque">Cheque</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-medium text-muted">Referencia / Folio</label>
+                        <input type="text" class="form-control shadow-none" id="editPagoReferencia" placeholder="Ej: SPEI 12345">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top-0 pt-0 mt-2 bg-light rounded-bottom-4 p-3 d-flex justify-content-between">
+                <button type="button" class="btn btn-light shadow-none text-secondary fw-medium" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning px-4" id="btnGuardarEditPago"><i class="bi bi-save me-1"></i> Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Cargar Factura / Comprobante -->
+<div class="modal fade" id="uploadFacturaModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-header border-bottom-0 pb-0">
+                <h5 class="modal-title fw-bold" id="facturaModalTitle"><i class="bi bi-receipt me-2 text-primary"></i>Cargar Factura al Pago</h5>
+                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 pt-3">
+                <input type="hidden" id="facturaPagoId">
+                <input type="hidden" id="facturaTipo">
+
+                <div class="mb-3">
+                    <label class="form-label fw-medium text-muted small" id="facturaFileLabel"></label>
+                    <input type="file" class="form-control shadow-none" id="facturaFileInput">
+                    <div class="form-text text-muted" id="facturaFileHelp"></div>
+                </div>
+            </div>
+            <div class="modal-footer border-top-0 pt-0 mt-2 bg-light rounded-bottom-4 p-3 d-flex justify-content-between">
+                <button type="button" class="btn btn-light shadow-none text-secondary fw-medium" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary px-4" id="btnSaveFactura"><i class="bi bi-cloud-upload me-1"></i> Subir Documento</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Registrar Pago -->
 <div class="modal fade" id="newPaymentModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
@@ -616,7 +856,13 @@
                     <input type="hidden" name="servicio_id" id="paymentServicioId">
 
                     <div class="mb-3">
-                        <label class="form-label small fw-medium text-muted">Monto Pagado ($) *</label>
+                        <label class="form-label small fw-medium text-muted">Abono / Cuota a Pagar *</label>
+                        <select class="form-select shadow-none list-group-select" name="amortizacion_concepto" id="paymentConcepto" required>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium text-muted">Monto Registrado ($) *</label>
                         <input type="number" step="0.01" class="form-control form-control-lg shadow-none text-success fw-bold" name="monto_pagado" id="paymentMonto" required placeholder="0.00">
                     </div>
 
@@ -634,9 +880,13 @@
                                 <option value="Cheque">Cheque</option>
                             </select>
                         </div>
-                        <div class="col-12">
-                            <label class="form-label small fw-medium text-muted">Referencia / Comprobante</label>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-medium text-muted">Referencia (Folio)</label>
                             <input type="text" class="form-control shadow-none" name="referencia" placeholder="Ej: SPEI 12345609">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-medium text-muted">Subir Comprobante (Opcional)</label>
+                            <input type="file" class="form-control shadow-none form-control-sm mt-1" name="comprobante_file" accept=".pdf, image/*">
                         </div>
                     </div>
                 </div>
@@ -680,6 +930,47 @@
     </div>
 </div>
 
+<!-- Modal Ajustes de Perfil -->
+<div class="modal fade" id="editClientProfileModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header border-bottom-0 pb-0">
+                <h5 class="modal-title fw-bold">Ajustes de Perfil Comercial</h5>
+                <button type="button" class="btn-close shadow-none" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editProfileForm">
+                <div class="modal-body">
+                    <input type="hidden" name="cliente_id" value="<?= $cliente['id'] ?>">
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium text-muted">Nombre de la Empresa *</label>
+                        <input type="text" class="form-control shadow-none" name="nombre_empresa" required value="<?= htmlspecialchars($cliente['nombre_empresa']) ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium text-muted">Usuario para el Portal * <small>(Si cambia, debe reiniciar sesión)</small></label>
+                        <input type="text" class="form-control shadow-none" name="username" required value="<?= htmlspecialchars($cliente['username']) ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium text-muted">Nombre del Contacto Directo</label>
+                        <input type="text" class="form-control shadow-none" name="contacto_principal" value="<?= htmlspecialchars($cliente['contacto_principal'] ?? '') ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium text-muted">Teléfono Móvil</label>
+                        <input type="text" class="form-control shadow-none" name="telefono" value="<?= htmlspecialchars($cliente['telefono'] ?? '') ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-medium text-muted">Correo Electrónico</label>
+                        <input type="email" class="form-control shadow-none" name="email" value="<?= htmlspecialchars($cliente['email'] ?? '') ?>">
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0 pt-0 mt-3 p-3 bg-light rounded-bottom-4">
+                    <button type="button" class="btn btn-light shadow-none text-secondary fw-medium" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-custom px-4" id="btnUpdateProfile">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Ver Amortizacion (Cards) -->
 <div class="modal fade" id="viewAmortizationModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
@@ -709,7 +1000,9 @@
                         <thead class="table-light text-muted small" style="position: sticky; top: 0; z-index: 1;">
                             <tr>
                                 <th># Pago</th>
-                                <th>Monto a Pagar</th>
+                                <th>Subtotal</th>
+                                <th>I.V.A (16%)</th>
+                                <th>Total a Pagar</th>
                                 <th>Saldo Restante</th>
                             </tr>
                         </thead>
@@ -768,7 +1061,43 @@
 
         esRecurrenteUnico.addEventListener('change', (e) => {
             boxFrecuenciaUnico.style.display = e.target.value === '1' ? 'block' : 'none';
+            // NEW FIX
+            boxDateUnico.style.display = e.target.value === '1' ? 'block' : 'none';
         });
+
+        const incluyeIva = document.getElementById('incluyeIva');
+        
+        function actualizarDesgloses() {
+            const isChecked = incluyeIva.checked;
+            
+            // Unico
+            let costoUnico = parseFloat(document.querySelector('input[name="costo_total_unico"]').value) || 0;
+            let ivaUnico = isChecked ? costoUnico * 0.16 : 0;
+            let totalUnico = costoUnico + ivaUnico;
+            
+            document.getElementById('breakdownUnicoSubtotal').innerText = `Subtotal: $${costoUnico.toFixed(2)}`;
+            const labelIvaUnico = document.getElementById('breakdownUnicoIva');
+            labelIvaUnico.style.display = isChecked ? 'block' : 'none';
+            labelIvaUnico.innerText = `+ I.V.A. (16%): $${ivaUnico.toFixed(2)}`;
+            document.getElementById('breakdownUnicoTotal').innerText = `Total: $${totalUnico.toFixed(2)}`;
+            
+            // Varios
+            let costoVarios = parseFloat(document.getElementById('costoTotalVarios').value) || 0;
+            let ivaVarios = isChecked ? costoVarios * 0.16 : 0;
+            let totalVarios = costoVarios + ivaVarios;
+            
+            document.getElementById('breakdownVariosSubtotal').innerText = `Subtotal: $${costoVarios.toFixed(2)}`;
+            const labelIvaVarios = document.getElementById('breakdownVariosIva');
+            labelIvaVarios.style.display = isChecked ? 'block' : 'none';
+            labelIvaVarios.innerText = `+ I.V.A. (16%): $${ivaVarios.toFixed(2)}`;
+            document.getElementById('breakdownVariosTotal').innerText = `Total: $${totalVarios.toFixed(2)}`;
+        }
+        
+        incluyeIva.addEventListener('change', () => {
+            actualizarDesgloses();
+        });
+
+        document.querySelector('input[name="costo_total_unico"]').addEventListener('input', actualizarDesgloses);
 
         function calcularMeses() {
             const total = parseFloat(inputCostoTotalVarios.value) || 0;
@@ -783,6 +1112,7 @@
             labelMeses.innerText = meses + " meses";
             inputMeses.value = meses;
             boxAmortizacion.style.display = 'none';
+            actualizarDesgloses();
         }
 
         inputCostoTotalVarios.addEventListener('input', calcularMeses);
@@ -793,9 +1123,11 @@
             const total = parseFloat(inputCostoTotalVarios.value) || 0;
             const anticipo = parseFloat(inputAnticipo.value) || 0;
             const mensualidad = parseFloat(inputMensualidad.value) || 0;
+            const isChecked = incluyeIva.checked;
+            const factor_iva = isChecked ? 1.16 : 1.0;
+            let fechaStr = document.querySelector('input[name="fecha_proximo_pago_varios"]').value;
 
             let restante = total - anticipo;
-            // Solo permite hacer click si hay logica sana.
             if (restante <= 0 || mensualidad <= 0) {
                 Swal.fire('Atención', 'Asegúrate de configurar el Costo, Anticipo (menor al costo) y Mensualidad.', 'warning');
                 return;
@@ -806,29 +1138,40 @@
                 <tr class="table-success">
                     <td>Anticipo (Día 0)</td>
                     <td>$${anticipo.toFixed(2)}</td>
-                    <td>$${restante.toFixed(2)}</td>
+                    <td>$${(isChecked ? anticipo * 0.16 : 0).toFixed(2)}</td>
+                    <td>$${(anticipo * factor_iva).toFixed(2)}</td>
+                    <td>$${(restante * factor_iva).toFixed(2)}</td>
                 </tr>
             `;
 
             let pagoNum = 1;
-            while (restante > 0) {
+            let currentRestante = restante;
+            
+            // Generate sequence dates
+            let fechaObj = fechaStr ? new Date(fechaStr + 'T12:00:00') : new Date();
+
+            while (currentRestante > 0) {
                 let montoPago = mensualidad;
-                if (restante < mensualidad) {
-                    montoPago = restante;
+                if (currentRestante < mensualidad) {
+                    montoPago = currentRestante;
                 }
-                restante -= montoPago;
-                if (restante < 0.01) restante = 0;
+                currentRestante -= montoPago;
+                if (currentRestante < 0.01) currentRestante = 0;
+                
+                let fechaDisplay = fechaObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
 
                 bodyAmortizacion.innerHTML += `
                     <tr>
-                        <td>Mes ${pagoNum}</td>
+                        <td>Mes ${pagoNum}<br><small class="text-muted">${fechaDisplay}</small></td>
                         <td>$${montoPago.toFixed(2)}</td>
-                        <td>$${restante.toFixed(2)}</td>
+                        <td>$${(isChecked ? montoPago * 0.16 : 0).toFixed(2)}</td>
+                        <td>$${(montoPago * factor_iva).toFixed(2)}</td>
+                        <td>$${(currentRestante * factor_iva).toFixed(2)}</td>
                     </tr>
                 `;
                 pagoNum++;
+                fechaObj.setMonth(fechaObj.getMonth() + 1);
             }
-            // Toggle view
             boxAmortizacion.style.display = boxAmortizacion.style.display === 'none' ? 'block' : 'none';
         });
 
@@ -944,40 +1287,97 @@
                     const costo = parseFloat(this.getAttribute('data-costo')) || 0;
                     const anticipo = parseFloat(this.getAttribute('data-anticipo')) || 0;
                     const mensualidad = parseFloat(this.getAttribute('data-mensualidad')) || 0;
+                    const incluyeIva = parseInt(this.getAttribute('data-iva')) === 1;
+                    const factor_iva = incluyeIva ? 1.16 : 1.0;
+                    const amortRaw = this.getAttribute('data-amortizaciones') || '[]';
+                    let amortizaciones = [];
+                    try { amortizaciones = JSON.parse(amortRaw); } catch(ex) {}
 
-                    document.getElementById('viewAmortCosto').textContent = '$' + costo.toFixed(2);
-                    document.getElementById('viewAmortAnticipo').textContent = '$' + anticipo.toFixed(2);
-                    document.getElementById('viewAmortMensualidad').textContent = '$' + mensualidad.toFixed(2);
+                    document.getElementById('viewAmortCosto').textContent = '$' + (costo * factor_iva).toFixed(2);
+                    document.getElementById('viewAmortAnticipo').textContent = '$' + (anticipo * factor_iva).toFixed(2);
+                    document.getElementById('viewAmortMensualidad').textContent = '$' + (mensualidad * factor_iva).toFixed(2);
 
                     const tbody = document.getElementById('viewAmortBody');
-                    let restante = costo - anticipo;
+                    const restante = costo - anticipo;
 
+                    // Fila del anticipo
                     tbody.innerHTML = `
                         <tr class="table-success">
-                            <td>Anticipo Acordado (Día 0)</td>
+                            <td><strong>Anticipo Acordado</strong><br><small class="text-muted">Día 0</small></td>
                             <td>$${anticipo.toFixed(2)}</td>
-                            <td>$${restante.toFixed(2)}</td>
+                            <td>$${(incluyeIva ? anticipo * 0.16 : 0).toFixed(2)}</td>
+                            <td class="fw-bold">$${(anticipo * factor_iva).toFixed(2)}</td>
+                            <td>$${(restante * factor_iva).toFixed(2)}</td>
                         </tr>
                     `;
 
-                    let pagoNum = 1;
-                    while (restante > 0) {
-                        let montoPago = mensualidad;
-                        if (restante < mensualidad) {
-                            montoPago = restante;
-                        }
-                        restante -= montoPago;
-                        if (restante < 0.01) restante = 0;
+                    if (amortizaciones.length > 0) {
+                        // Usar datos reales de BD con sus estados
+                        amortizaciones.forEach(am => {
+                            const isPagado  = am.estado === 'pagado';
+                            const isVencido = am.es_vencido == 1 || am.estado === 'vencido';
+                            const monto     = parseFloat(am.monto_esperado) || mensualidad;
+                            const iva       = incluyeIva ? monto * 0.16 : 0;
+                            const total     = monto + iva;
+                            const saldoRest = parseFloat(am.saldo_restante) || 0;
 
-                        tbody.innerHTML += `
-                            <tr>
-                                <td>Mes ${pagoNum}</td>
-                                <td>$${montoPago.toFixed(2)}</td>
-                                <td class="${restante === 0 ? 'text-success fw-bold' : ''}">$${restante.toFixed(2)}</td>
-                            </tr>
-                        `;
-                        pagoNum++;
+                            let fechaDisp = '';
+                            if (am.fecha_esperada) {
+                                fechaDisp = new Date(am.fecha_esperada + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+                            }
+
+                            let rowClass = '';
+                            let badge = '';
+                            if (isPagado) {
+                                rowClass = 'table-success';
+                                badge = '<br><span class="badge bg-success mt-1"><i class="bi bi-check-circle me-1"></i>Pagado</span>';
+                            } else if (isVencido) {
+                                rowClass = 'table-danger';
+                                badge = '<br><span class="badge bg-danger mt-1">Pago Vencido</span>';
+                            }
+
+                            tbody.innerHTML += `
+                                <tr class="${rowClass}">
+                                    <td>Mes ${am.numero_pago}<br><small class="${isVencido && !isPagado ? 'text-danger fw-bold' : 'text-muted'}">${fechaDisp}</small>${badge}</td>
+                                    <td>$${monto.toFixed(2)}</td>
+                                    <td>$${iva.toFixed(2)}</td>
+                                    <td class="fw-bold">$${total.toFixed(2)}</td>
+                                    <td>$${(saldoRest * factor_iva).toFixed(2)}</td>
+                                </tr>
+                            `;
+                        });
+                    } else {
+                        // Fallback: recalcular si no hay amortizaciones en BD
+                        const fechaStr = this.getAttribute('data-fecha') || '';
+                        let pagoNum = 1;
+                        let currentRestante = restante;
+                        let fechaObj = fechaStr ? new Date(fechaStr + 'T12:00:00') : new Date();
+                        const now = new Date();
+
+                        while (currentRestante > 0) {
+                            let montoPago = mensualidad;
+                            if (currentRestante < mensualidad) montoPago = currentRestante;
+                            currentRestante -= montoPago;
+                            if (currentRestante < 0.01) currentRestante = 0;
+
+                            const isVencido = fechaObj < now;
+                            const fechaDisplay = fechaObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+                            const vencidoBadge = isVencido ? '<br><span class="badge bg-danger mt-1">Pago Vencido</span>' : '';
+
+                            tbody.innerHTML += `
+                                <tr class="${isVencido ? 'table-danger' : ''}">
+                                    <td>Mes ${pagoNum}<br><small class="${isVencido ? 'text-danger fw-bold' : 'text-muted'}">${fechaDisplay}</small>${vencidoBadge}</td>
+                                    <td>$${montoPago.toFixed(2)}</td>
+                                    <td>$${(incluyeIva ? montoPago * 0.16 : 0).toFixed(2)}</td>
+                                    <td class="fw-bold">$${(montoPago * factor_iva).toFixed(2)}</td>
+                                    <td>$${(currentRestante * factor_iva).toFixed(2)}</td>
+                                </tr>
+                            `;
+                            pagoNum++;
+                            fechaObj.setMonth(fechaObj.getMonth() + 1);
+                        }
                     }
+
                     viewAmortizationModal.show();
                 });
             });
@@ -989,15 +1389,66 @@
         if (newPaymentModalEl) {
             newPaymentModal = new bootstrap.Modal(newPaymentModalEl);
             const paymentForm = document.getElementById('paymentForm');
+            const selectConcepto = document.getElementById('paymentConcepto');
+            const inputMonto = document.getElementById('paymentMonto');
 
             document.querySelectorAll('.btn-add-pago').forEach(btn => {
                 btn.addEventListener('click', function(e) {
                     e.preventDefault();
                     document.getElementById('paymentServicioId').value = this.getAttribute('data-servicio-id');
                     document.getElementById('paymentServiceName').textContent = this.getAttribute('data-nombre');
-                    document.getElementById('paymentMonto').value = '';
+                    inputMonto.value = '';
+
+                    const tipo_pago = this.getAttribute('data-tipo');
+                    const anticipo = parseFloat(this.getAttribute('data-anticipo')) || 0;
+                    const amortizacionesRaw = this.getAttribute('data-amortizaciones');
+                    const has_iva = parseInt(this.getAttribute('data-iva')) === 1;
+                    
+                    let amortizaciones = [];
+                    try { amortizaciones = JSON.parse(amortizacionesRaw); } catch(ex){}
+
+                    selectConcepto.innerHTML = '<option value="" data-monto="">-- Seleccionar Concepto --</option>';
+
+                    if (tipo_pago === 'unico') {
+                        selectConcepto.innerHTML += `<option value="unico_0" data-monto="">Pago Único de Servicio</option>`;
+                    } else {
+                        if (anticipo > 0) {
+                            selectConcepto.innerHTML += `<option value="anticipo_0" data-monto="${anticipo.toFixed(2)}">Anticipo Pactado ($${anticipo.toFixed(2)})</option>`;
+                        }
+                        if (amortizaciones && amortizaciones.length > 0) {
+                            amortizaciones.forEach(am => {
+                                const m_base = parseFloat(am.monto_esperado);
+                                const m_total = m_base * (has_iva ? 1.16 : 1.0);
+                                const m_str = m_total.toFixed(2);
+                                
+                                let fechaDisp = '';
+                                if (am.fecha_esperada) {
+                                    fechaDisp = new Date(am.fecha_esperada + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+                                }
+                                
+                                if (am.estado === 'pendiente' || am.estado === 'vencido') {
+                                    let label = am.estado === 'vencido' ? `(VENCIDA)` : '';
+                                    selectConcepto.innerHTML += `<option value="mes_${am.id}" data-monto="${m_str}">Mensualidad ${am.numero_pago} del ${fechaDisp} por $${m_str} ${label}</option>`;
+                                } else {
+                                    selectConcepto.innerHTML += `<option value="disabled" disabled>Mensualidad ${am.numero_pago} del ${fechaDisp} por $${m_str} (PAGADA)</option>`;
+                                }
+                            });
+                        }
+                    }
+                    selectConcepto.innerHTML += `<option value="otro" data-monto="">Abono Libre / Otro Monto</option>`;
+
                     newPaymentModal.show();
                 });
+            });
+
+            selectConcepto.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                const montoAsociado = selectedOption.getAttribute('data-monto');
+                if (montoAsociado) {
+                    inputMonto.value = montoAsociado;
+                } else {
+                    inputMonto.value = '';
+                }
             });
 
             paymentForm.addEventListener('submit', function(e) {
@@ -1036,6 +1487,164 @@
                     btnSave.innerHTML = originalText;
                     btnSave.disabled = false;
                 });
+            });
+        }
+
+        // Factura Upload Logic
+        const uploadFacturaModalEl = document.getElementById('uploadFacturaModal');
+        let uploadFacturaModal;
+        if (uploadFacturaModalEl) {
+            uploadFacturaModal = new bootstrap.Modal(uploadFacturaModalEl);
+
+            document.querySelectorAll('.btn-upload-factura').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const pagoId = this.getAttribute('data-pago-id');
+                    const tipo = this.getAttribute('data-tipo');
+
+                    document.getElementById('facturaPagoId').value = pagoId;
+                    document.getElementById('facturaTipo').value = tipo;
+
+                    const fileInput = document.getElementById('facturaFileInput');
+                    const label = document.getElementById('facturaFileLabel');
+                    const help = document.getElementById('facturaFileHelp');
+
+                    fileInput.value = ''; // reset
+                    if (tipo === 'pdf') {
+                        fileInput.accept = '.pdf';
+                        label.innerHTML = '<i class="bi bi-file-earmark-pdf text-danger me-1"></i>Factura en PDF';
+                        help.textContent = 'Solo archivos .PDF de la factura timbrada.';
+                    } else {
+                        fileInput.accept = '.xml';
+                        label.innerHTML = '<i class="bi bi-filetype-xml text-success me-1"></i>CFDI en XML';
+                        help.textContent = 'Solo archivos .XML del CFDI timbrado.';
+                    }
+
+                    uploadFacturaModal.show();
+                });
+            });
+
+            document.getElementById('btnSaveFactura').addEventListener('click', function() {
+                const pagoId = document.getElementById('facturaPagoId').value;
+                const tipo = document.getElementById('facturaTipo').value;
+                const fileInput = document.getElementById('facturaFileInput');
+
+                if (!fileInput.files[0]) {
+                    Swal.fire('Atención', 'Por favor selecciona un archivo antes de continuar.', 'warning');
+                    return;
+                }
+
+                const btnSave = this;
+                const originalText = btnSave.innerHTML;
+                btnSave.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Subiendo...';
+                btnSave.disabled = true;
+
+                const formData = new FormData();
+                formData.append('pago_id', pagoId);
+                formData.append('tipo', tipo);
+                formData.append('factura_file', fileInput.files[0]);
+
+                fetch('/vizone/dashboard/clientes/pagos/facturas/save', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        uploadFacturaModal.hide();
+                        Swal.fire({
+                            icon: 'success',
+                            title: '¡Documento Cargado!',
+                            text: data.message,
+                            timer: 1500,
+                            showConfirmButton: false
+                        }).then(() => location.reload());
+                    } else {
+                        Swal.fire('Error', data.message, 'error');
+                    }
+                })
+                .catch(err => {
+                    console.error('Error:', err);
+                    Swal.fire('Error', 'No se pudo conectar con el servidor.', 'error');
+                })
+                .finally(() => {
+                    btnSave.innerHTML = originalText;
+                    btnSave.disabled = false;
+                });
+            });
+
+            // Comprobante upload (same modal, tipo = 'comprobante')
+            document.querySelectorAll('.btn-upload-comprobante').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const pagoId = this.getAttribute('data-pago-id');
+                    document.getElementById('facturaPagoId').value = pagoId;
+                    document.getElementById('facturaTipo').value = 'comprobante';
+
+                    const fileInput = document.getElementById('facturaFileInput');
+                    const label = document.getElementById('facturaFileLabel');
+                    const help = document.getElementById('facturaFileHelp');
+
+                    fileInput.value = '';
+                    fileInput.accept = '.pdf, image/*';
+                    label.innerHTML = '<i class="bi bi-file-earmark-image text-primary me-1"></i>Comprobante de Pago';
+                    help.textContent = 'Puedes subir una captura de pantalla o PDF del comprobante.';
+                    document.getElementById('facturaModalTitle').innerHTML = '<i class="bi bi-file-earmark-image me-2 text-primary"></i>Subir Comprobante de Pago';
+
+                    uploadFacturaModal.show();
+                });
+            });
+        }
+
+        // Edit Pago Logic
+        const editPagoModalEl = document.getElementById('editPagoModal');
+        let editPagoModal;
+        if (editPagoModalEl) {
+            editPagoModal = new bootstrap.Modal(editPagoModalEl);
+
+            document.querySelectorAll('.btn-edit-pago').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    document.getElementById('editPagoId').value = this.getAttribute('data-id');
+                    document.getElementById('editPagoConcepto').value = this.getAttribute('data-concepto');
+                    document.getElementById('editPagoMonto').value = this.getAttribute('data-monto');
+                    document.getElementById('editPagoFecha').value = this.getAttribute('data-fecha');
+                    document.getElementById('editPagoReferencia').value = this.getAttribute('data-referencia');
+                    document.getElementById('editPagoMetodo').value = this.getAttribute('data-metodo');
+                    editPagoModal.show();
+                });
+            });
+
+            document.getElementById('btnGuardarEditPago').addEventListener('click', function() {
+                const btn = this;
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
+                btn.disabled = true;
+
+                const formData = new FormData();
+                formData.append('pago_id', document.getElementById('editPagoId').value);
+                formData.append('concepto', document.getElementById('editPagoConcepto').value);
+                formData.append('monto_pagado', document.getElementById('editPagoMonto').value);
+                formData.append('fecha_pago', document.getElementById('editPagoFecha').value);
+                formData.append('metodo_pago', document.getElementById('editPagoMetodo').value);
+                formData.append('referencia', document.getElementById('editPagoReferencia').value);
+
+                fetch('/vizone/dashboard/clientes/pagos/update', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        editPagoModal.hide();
+                        Swal.fire({ icon: 'success', title: 'Pago actualizado', timer: 1200, showConfirmButton: false })
+                            .then(() => location.reload());
+                    } else {
+                        Swal.fire('Error', data.message, 'error');
+                    }
+                })
+                .catch(() => Swal.fire('Error', 'No se pudo conectar con el servidor.', 'error'))
+                .finally(() => { btn.innerHTML = originalText; btn.disabled = false; });
             });
         }
 
@@ -1119,6 +1728,41 @@
             editBoxDateUnico.style.display = e.target.value === '1' ? 'block' : 'none';
         });
 
+        const editIncluyeIva = document.getElementById('editIncluyeIva');
+        
+        function editActualizarDesgloses() {
+            const isChecked = editIncluyeIva.checked;
+            
+            // Unico
+            let costoUnico = parseFloat(document.getElementById('editCostoTotalUnico').value) || 0;
+            let ivaUnico = isChecked ? costoUnico * 0.16 : 0;
+            let totalUnico = costoUnico + ivaUnico;
+            
+            document.getElementById('editBreakdownUnicoSubtotal').innerText = `Subtotal: $${costoUnico.toFixed(2)}`;
+            const labelIvaUnico = document.getElementById('editBreakdownUnicoIva');
+            labelIvaUnico.style.display = isChecked ? 'block' : 'none';
+            labelIvaUnico.innerText = `+ I.V.A. (16%): $${ivaUnico.toFixed(2)}`;
+            document.getElementById('editBreakdownUnicoTotal').innerText = `Total: $${totalUnico.toFixed(2)}`;
+            
+            // Varios
+            let costoVarios = parseFloat(document.getElementById('editCostoTotalVarios').value) || 0;
+            let ivaVarios = isChecked ? costoVarios * 0.16 : 0;
+            let totalVarios = costoVarios + ivaVarios;
+            
+            document.getElementById('editBreakdownVariosSubtotal').innerText = `Subtotal: $${costoVarios.toFixed(2)}`;
+            const labelIvaVarios = document.getElementById('editBreakdownVariosIva');
+            labelIvaVarios.style.display = isChecked ? 'block' : 'none';
+            labelIvaVarios.innerText = `+ I.V.A. (16%): $${ivaVarios.toFixed(2)}`;
+            document.getElementById('editBreakdownVariosTotal').innerText = `Total: $${totalVarios.toFixed(2)}`;
+        }
+        
+        editIncluyeIva.addEventListener('change', () => {
+            editActualizarDesgloses();
+        });
+
+        document.getElementById('editCostoTotalUnico').addEventListener('input', editActualizarDesgloses);
+
+
         function editCalcularMeses() {
             const total = parseFloat(editInputCostoTotalVarios.value) || 0;
             const anticipo = parseFloat(editInputAnticipo.value) || 0;
@@ -1132,6 +1776,7 @@
             editLabelMeses.innerText = meses + " meses";
             editInputMeses.value = meses;
             editBoxAmortizacion.style.display = 'none';
+            editActualizarDesgloses();
         }
 
         editInputCostoTotalVarios.addEventListener('input', editCalcularMeses);
@@ -1142,6 +1787,9 @@
             const total = parseFloat(editInputCostoTotalVarios.value) || 0;
             const anticipo = parseFloat(editInputAnticipo.value) || 0;
             const mensualidad = parseFloat(editInputMensualidad.value) || 0;
+            const isChecked = editIncluyeIva.checked;
+            const factor_iva = isChecked ? 1.16 : 1.0;
+            let fechaStr = document.getElementById('editFechaVarios').value;
 
             let restante = total - anticipo;
             if (restante <= 0 || mensualidad <= 0) {
@@ -1153,27 +1801,37 @@
                 <tr class="table-success">
                     <td>Anticipo (Día 0)</td>
                     <td>$${anticipo.toFixed(2)}</td>
-                    <td>$${restante.toFixed(2)}</td>
+                    <td>$${(isChecked ? anticipo * 0.16 : 0).toFixed(2)}</td>
+                    <td>$${(anticipo * factor_iva).toFixed(2)}</td>
+                    <td>$${(restante * factor_iva).toFixed(2)}</td>
                 </tr>
             `;
 
             let pagoNum = 1;
-            while (restante > 0) {
+            let currentRestante = restante;
+            let fechaObj = fechaStr ? new Date(fechaStr + 'T12:00:00') : new Date();
+
+            while (currentRestante > 0) {
                 let montoPago = mensualidad;
-                if (restante < mensualidad) {
-                    montoPago = restante;
+                if (currentRestante < mensualidad) {
+                    montoPago = currentRestante;
                 }
-                restante -= montoPago;
-                if (restante < 0.01) restante = 0;
+                currentRestante -= montoPago;
+                if (currentRestante < 0.01) currentRestante = 0;
+                
+                let fechaDisplay = fechaObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
 
                 editBodyAmortizacion.innerHTML += `
                     <tr>
-                        <td>Mes ${pagoNum}</td>
+                        <td>Mes ${pagoNum}<br><small class="text-muted">${fechaDisplay}</small></td>
                         <td>$${montoPago.toFixed(2)}</td>
-                        <td>$${restante.toFixed(2)}</td>
+                        <td>$${(isChecked ? montoPago * 0.16 : 0).toFixed(2)}</td>
+                        <td>$${(montoPago * factor_iva).toFixed(2)}</td>
+                        <td>$${(currentRestante * factor_iva).toFixed(2)}</td>
                     </tr>
                 `;
                 pagoNum++;
+                fechaObj.setMonth(fechaObj.getMonth() + 1);
             }
             editBoxAmortizacion.style.display = editBoxAmortizacion.style.display === 'none' ? 'block' : 'none';
         });
@@ -1191,6 +1849,12 @@
                     document.getElementById('editNombreProyecto').value = rawData.nombre_proyecto;
 
                     // 3. Populate conditional fields
+                    if (rawData.incluye_iva == 1) {
+                        editIncluyeIva.checked = true;
+                    } else {
+                        editIncluyeIva.checked = false;
+                    }
+
                     if (rawData.tipo_pago === 'unico') {
                         editRadioUnico.checked = true;
                         document.getElementById('editCostoTotalUnico').value = rawData.costo_total;
@@ -1334,6 +1998,66 @@
                 });
             });
         });
+
+        // Update Profile Logic
+        const editProfileForm = document.getElementById('editProfileForm');
+        if (editProfileForm) {
+            editProfileForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                const btnSave = document.getElementById('btnUpdateProfile');
+                const originalText = btnSave.innerHTML;
+                btnSave.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
+                btnSave.disabled = true;
+
+                fetch('/vizone/dashboard/clientes/update-profile', {
+                    method: 'POST',
+                    body: new FormData(this)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire({
+                            icon: 'success', title: 'Perfil Actualizado', text: data.message, showConfirmButton: false, timer: 1500
+                        }).then(() => location.reload());
+                    } else {
+                        Swal.fire('Error', data.message, 'error');
+                    }
+                })
+                .catch(err => Swal.fire('Error', 'Problema al procesar la solicitud.', 'error'))
+                .finally(() => { btnSave.innerHTML = originalText; btnSave.disabled = false; });
+            });
+        }
+
+        // Reset Password Logic
+        const btnResetPassword = document.getElementById('btnResetPassword');
+        if (btnResetPassword) {
+            btnResetPassword.addEventListener('click', function(e) {
+                e.preventDefault();
+                Swal.fire({
+                    title: '¿Reestablecer Contraseña?',
+                    text: 'Se le asignará temporalmente la contraseña "password123". Al intentar acceder, el sistema obligará a cambiarla.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, reestablecer',
+                    cancelButtonText: 'Cancelar'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        const formData = new FormData();
+                        formData.append('cliente_id', '<?= $cliente['id'] ?>');
+
+                        fetch('/vizone/dashboard/clientes/reset-password', {
+                            method: 'POST', body: formData
+                        }).then(res => res.json()).then(data => {
+                            if (data.success) {
+                                Swal.fire('Restablecido', data.message, 'success');
+                            } else {
+                                Swal.fire('Error', data.message, 'error');
+                            }
+                        }).catch(err => Swal.fire('Error', 'No se pudo conectar', 'error'));
+                    }
+                });
+            });
+        }
 
     });
 </script>

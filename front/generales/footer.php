@@ -2,7 +2,7 @@
 </main>
 
     <!-- Botón Flotante de WhatsApp -->
-    <a href="https://wa.me/5211234567890?text=Hola,%20Vizoneweb.%20Me%20interesa%20conocer%20más%20sobre%20sus%20servicios%20de%20tecnología." class="whatsapp-float" target="_blank" rel="noopener noreferrer">
+    <a href="https://wa.me/525598793460?text=Hola,%20Vizoneweb.%20Me%20interesa%20conocer%20más%20sobre%20sus%20servicios%20de%20tecnología." class="whatsapp-float" target="_blank" rel="noopener noreferrer">
         <i class="bi bi-whatsapp"></i>
     </a>
 

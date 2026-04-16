@@ -67,6 +67,17 @@ class ClienteService
                 $stmtPagos->execute([$srv['id']]);
                 $srv['pagos_historial'] = $stmtPagos->fetchAll();
             }
+            $stmtAmort = $this->db->prepare("
+                SELECT *, 
+                       CASE WHEN fecha_esperada < CURRENT_DATE() AND estado = 'pendiente' THEN 1 ELSE 0 END as es_vencido 
+                FROM servicio_amortizacion 
+                WHERE servicio_id = ? 
+                ORDER BY numero_pago ASC
+            ");
+            foreach ($servicios as &$srv) {
+                $stmtAmort->execute([$srv['id']]);
+                $srv['amortizaciones'] = $stmtAmort->fetchAll();
+            }
             $cliente['servicios'] = $servicios;
 
             // Documentos del cliente
@@ -115,6 +126,17 @@ class ClienteService
             foreach ($servicios as &$srv) {
                 $stmtPagos->execute([$srv['id']]);
                 $srv['pagos_historial'] = $stmtPagos->fetchAll();
+            }
+            $stmtAmort = $this->db->prepare("
+                SELECT *, 
+                       CASE WHEN fecha_esperada < CURRENT_DATE() AND estado = 'pendiente' THEN 1 ELSE 0 END as es_vencido 
+                FROM servicio_amortizacion 
+                WHERE servicio_id = ? 
+                ORDER BY numero_pago ASC
+            ");
+            foreach ($servicios as &$srv) {
+                $stmtAmort->execute([$srv['id']]);
+                $srv['amortizaciones'] = $stmtAmort->fetchAll();
             }
             $cliente['servicios'] = $servicios;
 
@@ -188,8 +210,9 @@ class ClienteService
                     cliente_id, tipo_servicio, nombre_proyecto, tipo_pago, 
                     costo_total, pago_inicial, 
                     mensualidad_financiamiento, meses_financiamiento, 
-                    es_recurrente, frecuencia_pago, fecha_proximo_pago
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    es_recurrente, frecuencia_pago, fecha_proximo_pago,
+                    incluye_iva
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
 
             $result = $stmt->execute([
@@ -205,8 +228,16 @@ class ClienteService
 
                 empty($datos['es_recurrente']) ? 0 : 1,
                 empty($datos['frecuencia_pago']) ? 'ninguno' : $datos['frecuencia_pago'],
-                empty($datos['fecha_proximo_pago']) ? null : $datos['fecha_proximo_pago']
+                empty($datos['fecha_proximo_pago']) ? null : $datos['fecha_proximo_pago'],
+                $datos['incluye_iva'] ?? 0
             ]);
+
+            if ($result) {
+                $servicio_id = $this->db->lastInsertId();
+                if (($datos['tipo_pago'] ?? 'unico') === 'varios') {
+                    $this->generarAmortizacion($servicio_id, $datos);
+                }
+            }
 
             return ['success' => $result, 'message' => $result ? 'Servicio/Proyecto añadido al cliente.' : 'Error al guardar el servicio.'];
         } catch (PDOException $e) {
@@ -223,6 +254,7 @@ class ClienteService
         try {
             $stmt = $this->db->prepare("DELETE FROM cliente_servicios WHERE id = ?");
             $result = $stmt->execute([$servicio_id]);
+            // Amortizacion se elimina en cascada en mysql gracias a ON DELETE CASCADE
             return ['success' => $result, 'message' => 'Servicio eliminado correctamente.'];
         } catch (PDOException $e) {
             error_log("deleteServicio Error: " . $e->getMessage());
@@ -299,7 +331,8 @@ class ClienteService
                     tipo_servicio = ?, nombre_proyecto = ?, tipo_pago = ?, 
                     costo_total = ?, pago_inicial = ?, 
                     mensualidad_financiamiento = ?, meses_financiamiento = ?, 
-                    es_recurrente = ?, frecuencia_pago = ?, fecha_proximo_pago = ?
+                    es_recurrente = ?, frecuencia_pago = ?, fecha_proximo_pago = ?,
+                    incluye_iva = ?
                 WHERE id = ? AND cliente_id = ?
             ");
 
@@ -316,10 +349,18 @@ class ClienteService
                 empty($datos['es_recurrente']) ? 0 : 1,
                 empty($datos['frecuencia_pago']) ? 'ninguno' : $datos['frecuencia_pago'],
                 empty($datos['fecha_proximo_pago']) ? null : $datos['fecha_proximo_pago'],
+                $datos['incluye_iva'] ?? 0,
 
                 $datos['id'],
                 $datos['cliente_id']
             ]);
+
+            if ($result && ($datos['tipo_pago'] ?? 'unico') === 'varios') {
+                $this->generarAmortizacion($datos['id'], $datos);
+            } else if ($result && ($datos['tipo_pago'] ?? 'unico') !== 'varios') {
+                $stmtDel = $this->db->prepare("DELETE FROM servicio_amortizacion WHERE servicio_id = ?");
+                $stmtDel->execute([$datos['id']]);
+            }
 
             return ['success' => $result, 'message' => $result ? 'Servicio actualizado correctamente.' : 'Error al actualizar el servicio.'];
         } catch (PDOException $e) {
@@ -334,34 +375,85 @@ class ClienteService
     public function addPago($datos)
     {
         try {
+            $this->db->beginTransaction();
+
+            $comprobante_url = null;
+            if (is_array($datos['comprobante_file'] ?? null) && !empty($datos['comprobante_file']['name']) && $datos['comprobante_file']['error'] === UPLOAD_ERR_OK) {
+                $file = $datos['comprobante_file'];
+                $allowedExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'webp'];
+                $fileInfo = pathinfo($file['name']);
+                $extension = strtolower($fileInfo['extension'] ?? '');
+
+                if (in_array($extension, $allowedExtensions)) {
+                    $uploadDir = BACK_PATH . 'uploads/comprobantes/';
+                    if (!file_exists($uploadDir)) {
+                        mkdir($uploadDir, 0755, true);
+                    }
+                    $safeName = md5(uniqid()) . '.' . $extension;
+                    $destination = $uploadDir . $safeName;
+
+                    if (move_uploaded_file($file['tmp_name'], $destination)) {
+                        $comprobante_url = 'comprobantes/' . $safeName;
+                    }
+                }
+            }
+
             $stmt = $this->db->prepare("
-                INSERT INTO cliente_pagos (servicio_id, monto_pagado, fecha_pago, metodo_pago, referencia)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO cliente_pagos (servicio_id, monto_pagado, concepto, amortizacion_id, fecha_pago, metodo_pago, referencia, comprobante_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ");
+            
+            $concepto = $datos['concepto'] ?? 'Abono Libre';
+            $amortizacion_id = !empty($datos['amortizacion_id']) ? $datos['amortizacion_id'] : null;
+
             $result = $stmt->execute([
                 $datos['servicio_id'],
                 $datos['monto_pagado'],
+                $concepto,
+                $amortizacion_id,
                 $datos['fecha_pago'],
                 $datos['metodo_pago'] ?? 'Transferencia',
-                $datos['referencia'] ?? null
+                $datos['referencia'] ?? null,
+                $comprobante_url
             ]);
-            return ['success' => $result, 'message' => $result ? 'Pago registrado correctamente.' : 'Error al registrar el pago.'];
+
+            if ($result && $amortizacion_id) {
+                $stmtAmort = $this->db->prepare("UPDATE servicio_amortizacion SET estado = 'pagado' WHERE id = ?");
+                $stmtAmort->execute([$amortizacion_id]);
+            }
+
+            $this->db->commit();
+            return ['success' => true, 'message' => 'Pago registrado correctamente.'];
         } catch (PDOException $e) {
+            $this->db->rollBack();
             error_log("addPago Error: " . $e->getMessage());
             return ['success' => false, 'message' => 'Error de base de datos al registrar el pago.'];
         }
     }
 
-    /**
-     * Elimina un pago
-     */
     public function deletePago($pago_id)
     {
         try {
-            $stmt = $this->db->prepare("DELETE FROM cliente_pagos WHERE id = ?");
-            $result = $stmt->execute([$pago_id]);
+            $this->db->beginTransaction();
+
+            // Buscar si estaba ligado a una amortización
+            $stmt = $this->db->prepare("SELECT amortizacion_id FROM cliente_pagos WHERE id = ?");
+            $stmt->execute([$pago_id]);
+            $pagoInfo = $stmt->fetch();
+
+            if ($pagoInfo && !empty($pagoInfo['amortizacion_id'])) {
+                // Revertir a pendiente
+                $stmtRev = $this->db->prepare("UPDATE servicio_amortizacion SET estado = 'pendiente' WHERE id = ?");
+                $stmtRev->execute([$pagoInfo['amortizacion_id']]);
+            }
+
+            $stmtDel = $this->db->prepare("DELETE FROM cliente_pagos WHERE id = ?");
+            $result = $stmtDel->execute([$pago_id]);
+
+            $this->db->commit();
             return ['success' => $result, 'message' => 'Pago revocado correctamente.'];
         } catch (PDOException $e) {
+            $this->db->rollBack();
             error_log("deletePago Error: " . $e->getMessage());
             return ['success' => false, 'message' => 'Error al revocar el pago.'];
         }
@@ -392,13 +484,18 @@ class ClienteService
                 SELECT 
                     cp.id as pago_id,
                     cp.monto_pagado,
+                    cp.concepto,
                     cp.fecha_pago,
                     cp.metodo_pago,
                     cp.referencia,
+                    cp.comprobante_url,
+                    cp.factura_pdf_url,
+                    cp.factura_xml_url,
                     cs.id as servicio_id,
                     cs.nombre_proyecto,
                     c.id as cliente_id,
-                    c.nombre_empresa
+                    c.nombre_empresa,
+                    cs.cliente_id as srv_cliente_id
                 FROM cliente_pagos cp
                 JOIN cliente_servicios cs ON cp.servicio_id = cs.id
                 JOIN clientes c ON cs.cliente_id = c.id
@@ -445,6 +542,231 @@ class ClienteService
         } catch (PDOException $e) {
             error_log("getAllServiciosActivos Error: " . $e->getMessage());
             return [];
+        }
+    }
+
+    /**
+     * Crea un perfil de cliente básico vinculado a un usuario existente.
+     */
+    public function createClienteFromUser($user_id, $username)
+    {
+        try {
+            $insertCli = $this->db->prepare("
+                INSERT INTO clientes (user_id, nombre_empresa) 
+                VALUES (?, ?)
+            ");
+            $insertCli->execute([
+                $user_id,
+                $username // Por defecto usamos el username original
+            ]);
+            return ['success' => true, 'message' => 'Cliente vinculado creado.'];
+        } catch (PDOException $e) {
+            error_log("createClienteFromUser Error: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Error al crear la vinculacion de cliente.'];
+        }
+    }
+
+    /**
+     * Actualiza el perfil comercial de un cliente y su usuario en cascada si cambia el username.
+     */
+    public function updateProfile($datos)
+    {
+        try {
+            $this->db->beginTransaction();
+
+            $id = $datos['cliente_id'];
+            $username = $datos['username'];
+
+            // 1. Obtener cliente actual para revisar su user_id
+            $stmt = $this->db->prepare("SELECT user_id FROM clientes WHERE id = ?");
+            $stmt->execute([$id]);
+            $user_id = $stmt->fetchColumn();
+
+            // 2. Si se cambió el username y tiene user_id, validarlo y actualizar
+            if ($user_id) {
+                // Verificar posible colisión
+                $chk = $this->db->prepare("SELECT id FROM users WHERE username = ? AND id != ?");
+                $chk->execute([$username, $user_id]);
+                if ($chk->fetch()) {
+                    $this->db->rollBack();
+                    return ['success' => false, 'message' => 'El nombre de usuario elegido ya está en uso.'];
+                }
+
+                // Update username in users list
+                $usrUp = $this->db->prepare("UPDATE users SET username = ? WHERE id = ?");
+                $usrUp->execute([$username, $user_id]);
+            }
+
+            // 3. Actualizar la info general del cliente
+            $stmtUpd = $this->db->prepare("
+                UPDATE clientes 
+                SET nombre_empresa = ?, contacto_principal = ?, telefono = ?, email = ? 
+                WHERE id = ?
+            ");
+            $result = $stmtUpd->execute([
+                $datos['nombre_empresa'],
+                $datos['contacto_principal'],
+                $datos['telefono'],
+                $datos['email'],
+                $id
+            ]);
+
+            $this->db->commit();
+            return ['success' => true, 'message' => 'Perfil del cliente actualizado correctamente.'];
+
+        } catch (PDOException $e) {
+            $this->db->rollBack();
+            error_log("updateProfile Error: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Error de base de datos al actualizar el perfil.'];
+        }
+    }
+
+    /**
+     * Elimina un cliente y por cascada sus servicios y documentos.
+     * También pregunta si se quiere borrar el usuario asociado, pero aquí solo anularemos/dejaremos o lo borramos.
+     * Dado que el user_id está en la tabla clientes, podemos borrar ambos.
+     */
+    public function deleteCliente($id)
+    {
+        try {
+            $this->db->beginTransaction();
+
+            // Opcional: Obtener el user_id para eliminar el usuario también
+            $stmt = $this->db->prepare("SELECT user_id FROM clientes WHERE id = ?");
+            $stmt->execute([$id]);
+            $user_id = $stmt->fetchColumn();
+
+            // Eliminar el cliente (Servicios y Documentos se borran en cascada asumiendo ON DELETE CASCADE,
+            // pero si no, habría que borrarlos a mano. En init_db.php estan ON DELETE CASCADE)
+            $stmtDelCli = $this->db->prepare("DELETE FROM clientes WHERE id = ?");
+            $stmtDelCli->execute([$id]);
+
+            // Eliminar el usuario si lo tiene asociado
+            if ($user_id) {
+                $stmtDelUser = $this->db->prepare("DELETE FROM users WHERE id = ?");
+                $stmtDelUser->execute([$user_id]);
+            }
+
+            $this->db->commit();
+            return ['success' => true, 'message' => 'Cliente eliminado correctamente.'];
+        } catch (PDOException $e) {
+            $this->db->rollBack();
+            error_log("deleteCliente Error: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Error al eliminar el cliente.'];
+        }
+    }
+
+    private function generarAmortizacion($servicio_id, $datos) {
+        $stmtDel = $this->db->prepare("DELETE FROM servicio_amortizacion WHERE servicio_id = ?");
+        $stmtDel->execute([$servicio_id]);
+        
+        $costo = floatval($datos['costo_total'] ?? 0);
+        $anticipo = floatval($datos['pago_inicial'] ?? 0);
+        $mensualidad = floatval($datos['mensualidad_financiamiento'] ?? 0);
+        
+        $restante = $costo - $anticipo;
+        if ($restante <= 0 || $mensualidad <= 0) return;
+        
+        $fecha_str = !empty($datos['fecha_proximo_pago']) ? $datos['fecha_proximo_pago'] : date('Y-m-d');
+        
+        $pago_num = 1;
+        $stmtIns = $this->db->prepare("INSERT INTO servicio_amortizacion (servicio_id, numero_pago, monto_esperado, fecha_esperada) VALUES (?, ?, ?, ?)");
+        
+        while ($restante > 0) {
+            $monto_pago = $mensualidad;
+            if ($restante < $mensualidad) {
+                $monto_pago = $restante;
+            }
+            $restante -= $monto_pago;
+            if ($restante < 0.01) $restante = 0;
+            
+            $stmtIns->execute([$servicio_id, $pago_num, $monto_pago, $fecha_str]);
+            
+            // Incrementar mes (1 exact month)
+            $fecha_str = date('Y-m-d', strtotime('+1 month', strtotime($fecha_str)));
+            $pago_num++;
+        }
+    }
+
+    /**
+     * Actualiza los datos editables de un pago
+     */
+    public function updatePago($pago_id, $datos)
+    {
+        try {
+            $stmt = $this->db->prepare("
+                UPDATE cliente_pagos SET
+                    concepto = ?, monto_pagado = ?, fecha_pago = ?, metodo_pago = ?, referencia = ?
+                WHERE id = ?
+            ");
+            $result = $stmt->execute([
+                $datos['concepto'],
+                $datos['monto_pagado'],
+                $datos['fecha_pago'],
+                $datos['metodo_pago'],
+                $datos['referencia'],
+                $pago_id
+            ]);
+            return ['success' => $result, 'message' => $result ? 'Pago actualizado correctamente.' : 'Error al actualizar el pago.'];
+        } catch (PDOException $e) {
+            error_log("updatePago Error: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Error de base de datos al actualizar el pago.'];
+        }
+    }
+
+    /**
+     * Guarda la Factura PDF o XML vinculada a un pago
+     */
+    public function saveFactura($pago_id, $tipo, $file)
+    {
+        try {
+            if ($file['error'] !== UPLOAD_ERR_OK || empty($file['name'])) {
+                return ['success' => false, 'message' => 'Error al recibir el archivo.'];
+            }
+
+            if ($tipo === 'pdf') {
+                $allowedExt = ['pdf'];
+                $column = 'factura_pdf_url';
+                $label = 'Factura PDF';
+            } elseif ($tipo === 'xml') {
+                $allowedExt = ['xml'];
+                $column = 'factura_xml_url';
+                $label = 'XML CFDI';
+            } elseif ($tipo === 'comprobante') {
+                $allowedExt = ['pdf', 'png', 'jpg', 'jpeg', 'webp'];
+                $column = 'comprobante_url';
+                $label = 'Comprobante de Pago';
+            } else {
+                return ['success' => false, 'message' => 'Tipo de document no reconocido.'];
+            }
+
+            $fileInfo = pathinfo($file['name']);
+            $extension = strtolower($fileInfo['extension'] ?? '');
+
+            if (!in_array($extension, $allowedExt)) {
+                return ['success' => false, 'message' => "Solo se permite el formato .{$allowedExt[0]} para $label."];
+            }
+
+            $uploadDir = BACK_PATH . 'uploads/facturas/';
+            if (!file_exists($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+
+            $safeName = md5(uniqid()) . '.' . $extension;
+            $destination = $uploadDir . $safeName;
+
+            if (!move_uploaded_file($file['tmp_name'], $destination)) {
+                return ['success' => false, 'message' => 'Error al mover el archivo al servidor.'];
+            }
+
+            $ruta_relativa = 'facturas/' . $safeName;
+            $stmt = $this->db->prepare("UPDATE cliente_pagos SET {$column} = ? WHERE id = ?");
+            $result = $stmt->execute([$ruta_relativa, $pago_id]);
+
+            return ['success' => $result, 'message' => $result ? "$label cargada correctamente." : "Error al guardar la ruta en la base de datos."];
+        } catch (PDOException $e) {
+            error_log("saveFactura Error: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Error de base de datos al guardar la factura.'];
         }
     }
 

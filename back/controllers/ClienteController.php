@@ -77,7 +77,8 @@ class ClienteController
             'meses_financiamiento' => $_POST['meses_financiamiento'] ?? 0,
             'es_recurrente' => $_POST['es_recurrente'] ?? 0,
             'frecuencia_pago' => $_POST['frecuencia_pago'] ?? 'ninguno',
-            'fecha_proximo_pago' => (!empty($_POST['fecha_proximo_pago'])) ? $_POST['fecha_proximo_pago'] : null
+            'fecha_proximo_pago' => (!empty($_POST['fecha_proximo_pago'])) ? $_POST['fecha_proximo_pago'] : null,
+            'incluye_iva' => isset($_POST['incluye_iva']) && $_POST['incluye_iva'] == '1' ? 1 : 0
         ];
 
         if (empty($datos['cliente_id']) || empty($datos['nombre_proyecto'])) {
@@ -168,7 +169,8 @@ class ClienteController
             'meses_financiamiento' => $_POST['meses_financiamiento'] ?? 0,
             'es_recurrente' => $_POST['es_recurrente'] ?? 0,
             'frecuencia_pago' => $_POST['frecuencia_pago'] ?? 'ninguno',
-            'fecha_proximo_pago' => (!empty($_POST['fecha_proximo_pago'])) ? $_POST['fecha_proximo_pago'] : null
+            'fecha_proximo_pago' => (!empty($_POST['fecha_proximo_pago'])) ? $_POST['fecha_proximo_pago'] : null,
+            'incluye_iva' => isset($_POST['incluye_iva']) && $_POST['incluye_iva'] == '1' ? 1 : 0
         ];
 
         if (empty($datos['cliente_id']) || empty($datos['nombre_proyecto'])) {
@@ -196,12 +198,28 @@ class ClienteController
             return $this->jsonResponse(false, 'Método no permitido.');
         }
 
+        $amort_val = $_POST['amortizacion_concepto'] ?? '';
+        $concepto = 'Abono Libre / General';
+        $amortizacion_id = null;
+
+        if (strpos($amort_val, 'mes_') === 0) {
+            $amortizacion_id = str_replace('mes_', '', $amort_val);
+            $concepto = 'Pago de Mensualidad';
+        } elseif ($amort_val == 'anticipo_0') {
+            $concepto = 'Pago de Anticipo';
+        } elseif ($amort_val == 'unico_0') {
+            $concepto = 'Pago Único / Totalidad';
+        }
+
         $datos = [
             'servicio_id' => $_POST['servicio_id'] ?? null,
             'monto_pagado' => $_POST['monto_pagado'] ?? 0,
+            'concepto' => $concepto,
+            'amortizacion_id' => $amortizacion_id,
             'fecha_pago' => $_POST['fecha_pago'] ?? date('Y-m-d'),
             'metodo_pago' => $_POST['metodo_pago'] ?? 'Transferencia',
-            'referencia' => trim($_POST['referencia'] ?? '')
+            'referencia' => trim($_POST['referencia'] ?? ''),
+            'comprobante_file' => $_FILES['comprobante_file'] ?? null
         ];
 
         if (empty($datos['servicio_id']) || empty($datos['monto_pagado'])) {
@@ -235,6 +253,151 @@ class ClienteController
         }
 
         $result = $this->clienteService->deletePago($id);
+        return $this->jsonResponse($result['success'], $result['message']);
+    }
+
+    /**
+     * Actualiza los datos de un pago registrado
+     */
+    public function updatePago()
+    {
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') return $this->jsonResponse(false, 'No autorizado.');
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') return $this->jsonResponse(false, 'Método no permitido.');
+
+        $pago_id = $_POST['pago_id'] ?? null;
+        if (!$pago_id) return $this->jsonResponse(false, 'ID de pago no proporcionado.');
+
+        $datos = [
+            'concepto'    => trim($_POST['concepto'] ?? ''),
+            'monto_pagado'=> $_POST['monto_pagado'] ?? 0,
+            'fecha_pago'  => $_POST['fecha_pago'] ?? date('Y-m-d'),
+            'metodo_pago' => $_POST['metodo_pago'] ?? 'Transferencia',
+            'referencia'  => trim($_POST['referencia'] ?? ''),
+        ];
+
+        $result = $this->clienteService->updatePago($pago_id, $datos);
+        return $this->jsonResponse($result['success'], $result['message']);
+    }
+
+    /**
+     * Carga la Factura PDF o XML de un pago registrado
+     */
+    public function saveFactura()
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+            return $this->jsonResponse(false, 'No autorizado.');
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            return $this->jsonResponse(false, 'Método no permitido.');
+        }
+
+        $pago_id = $_POST['pago_id'] ?? null;
+        $tipo = $_POST['tipo'] ?? null; // 'pdf' o 'xml'
+        $file = $_FILES['factura_file'] ?? null;
+
+        if (!$pago_id || !$tipo || empty($file['name'])) {
+            return $this->jsonResponse(false, 'Datos incompletos para cargar la factura.');
+        }
+
+        $result = $this->clienteService->saveFactura($pago_id, $tipo, $file);
+        return $this->jsonResponse($result['success'], $result['message']);
+    }
+
+    /**
+     * Elimina un cliente por su ID
+     */
+    public function delete()
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+            return $this->jsonResponse(false, 'No autorizado.');
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            return $this->jsonResponse(false, 'Método no permitido.');
+        }
+
+        $id = $_POST['id'] ?? null;
+        if (!$id) {
+            return $this->jsonResponse(false, 'ID de cliente no proporcionado.');
+        }
+
+        $result = $this->clienteService->deleteCliente($id);
+        return $this->jsonResponse($result['success'], $result['message']);
+    }
+
+    /**
+     * Actualiza el perfil de un cliente (datos comerciales y username vinculado)
+     */
+    public function updateProfile()
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+            return $this->jsonResponse(false, 'No autorizado.');
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            return $this->jsonResponse(false, 'Método no permitido.');
+        }
+
+        $datos = [
+            'cliente_id' => $_POST['cliente_id'] ?? null,
+            'nombre_empresa' => trim($_POST['nombre_empresa'] ?? ''),
+            'username' => trim($_POST['username'] ?? ''),
+            'contacto_principal' => trim($_POST['contacto_principal'] ?? ''),
+            'telefono' => trim($_POST['telefono'] ?? ''),
+            'email' => trim($_POST['email'] ?? '')
+        ];
+
+        if (empty($datos['cliente_id']) || empty($datos['nombre_empresa']) || empty($datos['username'])) {
+            return $this->jsonResponse(false, 'El ID de cliente, nombre de empresa y usuario son obligatorios.');
+        }
+
+        $result = $this->clienteService->updateProfile($datos);
+        return $this->jsonResponse($result['success'], $result['message']);
+    }
+
+    /**
+     * Resetea la contraseña de un cliente a 'password123'
+     */
+    public function resetPassword()
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+            return $this->jsonResponse(false, 'No autorizado.');
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            return $this->jsonResponse(false, 'Método no permitido.');
+        }
+
+        $cliente_id = $_POST['cliente_id'] ?? null;
+        if (empty($cliente_id)) {
+            return $this->jsonResponse(false, 'El ID de cliente es obligatorio.');
+        }
+
+        // Obtener el user_id del cliente
+        $cliente = $this->clienteService->getClienteById($cliente_id);
+        if (!$cliente || empty($cliente['user_id'])) {
+            return $this->jsonResponse(false, 'Cliente no encontrado o sin usuario asociado.');
+        }
+
+        $result = $this->authService->resetPassword($cliente['user_id']);
         return $this->jsonResponse($result['success'], $result['message']);
     }
 

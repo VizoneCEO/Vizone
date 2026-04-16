@@ -10,8 +10,8 @@ class Database
 
     private $host = 'localhost';
     private $db = 'vizone';
-    private $user = 'root'; // Usuario de XAMPP
-    private $pass = '';     // Contraseña de XAMPP
+    private $username = 'root';
+    private $password = '';
 
     private function __construct()
     {
@@ -23,7 +23,7 @@ class Database
         ];
 
         try {
-            $this->pdo = new PDO($dsn, $this->user, $this->pass, $options);
+            $this->pdo = new PDO($dsn, $this->username, $this->password, $options);
         } catch (\PDOException $e) {
             // En un entorno de producción, nunca mostrar el error real, sino guardarlo en logs.
             throw new \PDOException($e->getMessage(), (int) $e->getCode());

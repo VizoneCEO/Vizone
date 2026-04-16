@@ -99,8 +99,10 @@ html, body {
 <!-- ==============================================
      HERO SECTION (CANVAS BACKGROUND)
 =============================================== -->
-<section id="hero" style="position: relative; width: 100%; height: 100vh; min-height: 800px; display: flex; align-items: center; justify-content: center; overflow: hidden; background-color: var(--vizone-bg);">
-    <canvas id="network-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: auto;"></canvas>
+<!-- Canvas Global -->
+<canvas id="network-canvas" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 0; pointer-events: none;"></canvas>
+
+<section id="hero" style="position: relative; width: 100%; height: 100vh; min-height: 800px; display: flex; align-items: center; justify-content: center; overflow: hidden; background-color: transparent;">
     
     <div class="hero-content" style="position: relative; z-index: 2; text-align: center; padding: 0 20px; width: 100%;">
         <div class="fade-in-up">
@@ -129,7 +131,7 @@ html, body {
 <!-- ==============================================
      NUESTRA ESENCIA (SERVICIOS CORE)
 =============================================== -->
-<section id="esencia" style="background-color: var(--vizone-surface); padding: 8rem 0; border-top: 1px solid rgba(255,255,255,0.02);">
+<section id="esencia" style="background-color: rgba(10, 10, 10, 0.4); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 8rem 0; border-top: 1px solid rgba(255,255,255,0.02); position: relative; z-index: 1;">
     <div class="container" style="max-width: 1200px; margin: 0 auto; padding: 0 20px;">
         <div class="text-center mb-5 fade-in-up">
             <h2 style="font-size: clamp(2.2rem, 4vw, 3.5rem); font-weight: 300; letter-spacing: -1px; margin-bottom: 1rem;">Nuestra Esencia.</h2>
@@ -184,7 +186,7 @@ html, body {
 <!-- ==============================================
      VIZONE ACADEMY
 =============================================== -->
-<section id="academy" style="position: relative; background: radial-gradient(circle at center, #0a0a0c 0%, var(--vizone-bg) 100%); padding: 10rem 0; overflow: hidden;">
+<section id="academy" style="position: relative; background: transparent; padding: 10rem 0; overflow: hidden; z-index: 1;">
     <!-- Resplandor tecnológico sutil -->
     <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 800px; height: 800px; background: rgba(0, 210, 255, 0.02); border-radius: 50%; filter: blur(100px); pointer-events: none;"></div>
     
@@ -220,7 +222,7 @@ html, body {
 <!-- ==============================================
      CONTACTO Y AUDITORÍA (MANTENIDO)
 =============================================== -->
-<section id="contacto" class="position-relative overflow-hidden" style="background-color: #030303; padding: 6rem 0;">
+<section id="contacto" class="position-relative overflow-hidden" style="background-color: rgba(5,5,5,0.5); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); padding: 6rem 0; z-index: 1;">
     <div class="position-absolute top-0 start-0 w-100 h-100 opacity-25" style="background: radial-gradient(circle at bottom right, rgba(0,210,255,0.4) 0%, transparent 60%); pointer-events: none;"></div>
     <div class="container position-relative z-1 fade-in-up">
         <div class="row justify-content-center">
@@ -237,7 +239,7 @@ html, body {
                     <a href="#auditoria" class="cta-magnetic-btn" style="border-color: rgba(255,255,255,0.2);">
                         Agendar Auditoría VIP
                     </a>
-                    <a href="https://wa.me/5211234567890?text=Hola,%20Vizoneweb.%20Me%20interesa%20conocer%20más%20sobre%20sus%20servicios%20de%20tecnología."
+                    <a href="https://wa.me/525598793460?text=Hola,%20Vizoneweb.%20Me%20interesa%20conocer%20más%20sobre%20sus%20servicios%20de%20tecnología."
                         target="_blank" rel="noopener noreferrer"
                         class="btn px-4 py-3 d-inline-flex align-items-center justify-content-center text-white fw-medium border border-secondary"
                         style="background-color: #25D366; border-color: #25D366 !important; border-radius: 50px; transition: all 0.3s ease;">
@@ -254,7 +256,7 @@ html, body {
     </div>
 </section>
 
-<section id="auditoria" class="position-relative py-6" style="background-color: #020202; border-top: 1px solid rgba(255,255,255,0.05); padding: 5rem 0;">
+<section id="auditoria" class="position-relative py-6" style="background-color: transparent; border-top: 1px solid rgba(255,255,255,0.05); padding: 5rem 0; z-index: 1;">
     <div class="container position-relative z-1 fade-in-up">
         <div class="row justify-content-center">
             <div class="col-lg-8">
@@ -432,25 +434,16 @@ document.addEventListener('DOMContentLoaded', function() {
         radius: 120
     };
 
-    // Ajusta la posición del ratón tomando en cuenta el scroll y posición del hero
-    const heroSection = document.getElementById('hero');
-    
     window.addEventListener('mousemove', function(event) {
-        if(window.scrollY <= heroSection.offsetHeight) {
-            mouse.x = event.x;
-            mouse.y = event.y - heroSection.getBoundingClientRect().top;
-        } else {
-            mouse.x = null;
-            mouse.y = null;
-        }
+        // En un canvas fixed, event.x/y ya encajan con el viewport (100vw/vh).
+        mouse.x = event.clientX;
+        mouse.y = event.clientY;
     });
 
     window.addEventListener('resize', function() {
-        if(heroSection) {
-            canvas.width = heroSection.offsetWidth;
-            canvas.height = heroSection.offsetHeight;
-            init();
-        }
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        init();
     });
 
     // Restaurar mouse out of bounds
@@ -511,8 +504,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function init() {
         particlesArray = [];
-        canvas.width = heroSection.offsetWidth;
-        canvas.height = heroSection.offsetHeight;
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
         
         let density = window.innerWidth < 768 ? 20000 : 15000;
         let numberOfParticles = (canvas.height * canvas.width) / density;
@@ -530,17 +523,21 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    let hue = 190; // Comenzar en cian original
     function animate() {
         requestAnimationFrame(animate);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        hue += 0.3; // Incremento fluido
+        if (hue >= 360) hue = 0;
+
         for (let i = 0; i < particlesArray.length; i++) {
             particlesArray[i].update();
         }
-        connect();
+        connect(hue);
     }
 
-    function connect() {
+    function connect(currentHue) {
         let opacityValue = 1;
         for (let a = 0; a < particlesArray.length; a++) {
             for (let b = a; b < particlesArray.length; b++) {
@@ -551,7 +548,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 if (distance < distThreshold) {
                     opacityValue = 1 - (distance / distThreshold);
-                    ctx.strokeStyle = 'rgba(0, 210, 255,' + (opacityValue * 0.3) + ')';
+                    // Líneas dinámicas mutables por HSL
+                    ctx.strokeStyle = `hsla(${currentHue}, 100%, 50%, ${opacityValue * 0.4})`;
                     ctx.lineWidth = 1;
                     ctx.beginPath();
                     ctx.moveTo(particlesArray[a].x, particlesArray[a].y);
