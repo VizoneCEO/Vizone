@@ -229,13 +229,52 @@
 
                                     <?php if ($srv['es_recurrente'] && $srv['frecuencia_pago'] !== 'ninguno'): ?>
                                         <div class="mt-3">
-                                            <span class="d-block text-secondary small mb-1">Renovación de Servicio</span>
+                                            <span class="d-block text-secondary small mb-1">Cobros Recurrentes Programados</span>
                                             <span class="h6 fw-bold text-dark mb-0"><i
                                                     class="bi bi-arrow-repeat text-primary me-1"></i>Cobro
                                                 <?= ucfirst($srv['frecuencia_pago']) ?></span>
-                                            <?php if (!empty($srv['fecha_proximo_pago'])): ?>
-                                                <span class="d-block text-primary small mt-1"><i class="bi bi-calendar me-1"></i>Próxima Renovación: <?= htmlspecialchars($srv['fecha_proximo_pago']) ?></span>
+                                            <?php
+                                            // Calcular vencidos y próximo pendiente desde amortizaciones
+                                            $rec_vencidos = 0;
+                                            $rec_proximo_fecha = null;
+                                            $rec_proximo_vencido = false;
+                                            if (!empty($srv['amortizaciones'])) {
+                                                foreach ($srv['amortizaciones'] as $am) {
+                                                    if ($am['es_vencido']) $rec_vencidos++;
+                                                    if ($am['estado'] !== 'pagado' && !$rec_proximo_fecha) {
+                                                        $rec_proximo_fecha = $am['fecha_esperada'];
+                                                        $rec_proximo_vencido = (bool)$am['es_vencido'];
+                                                    }
+                                                }
+                                            }
+                                            if (!$rec_proximo_fecha && !empty($srv['fecha_proximo_pago'])) {
+                                                $rec_proximo_fecha = $srv['fecha_proximo_pago'];
+                                            }
+                                            ?>
+                                            <?php if ($rec_vencidos > 0): ?>
+                                                <div class="alert alert-danger py-1 px-2 mt-2 mb-1 small d-inline-block shadow-sm">
+                                                    <i class="bi bi-exclamation-triangle-fill me-1"></i> <strong><?= $rec_vencidos ?> cobro(s) vencido(s)</strong>
+                                                </div>
                                             <?php endif; ?>
+                                            <?php if ($rec_proximo_fecha): ?>
+                                                <span class="d-block <?= $rec_proximo_vencido ? 'text-danger fw-bold' : 'text-primary' ?> small mt-1">
+                                                    <i class="bi bi-calendar<?= $rec_proximo_vencido ? '-x' : '' ?> me-1"></i>
+                                                    <?= $rec_proximo_vencido ? 'Vencido: ' : 'Próximo Cobro: ' ?>
+                                                    <?= htmlspecialchars($rec_proximo_fecha) ?>
+                                                </span>
+                                            <?php endif; ?>
+                                            <!-- Botón para Ver Cobros Programados -->
+                                            <button class="btn btn-sm btn-outline-primary mt-2 shadow-sm w-100 btn-view-amortization"
+                                                    data-costo="<?= $srv['costo_total'] ?>"
+                                                    data-anticipo="0"
+                                                    data-mensualidad="<?= $srv['costo_total'] ?>"
+                                                    data-iva="<?= $srv['incluye_iva'] ?>"
+                                                    data-fecha="<?= $srv['fecha_proximo_pago'] ?>"
+                                                    data-recurrente="1"
+                                                    data-frecuencia="<?= htmlspecialchars($srv['frecuencia_pago']) ?>"
+                                                    data-amortizaciones="<?= htmlspecialchars(json_encode($srv['amortizaciones'] ?? [])) ?>">
+                                                <i class="bi bi-calendar-range me-1"></i> Ver Cobros Programados
+                                            </button>
                                         </div>
                                     <?php endif; ?>
 
@@ -1290,29 +1329,46 @@
                     const incluyeIva = parseInt(this.getAttribute('data-iva')) === 1;
                     const factor_iva = incluyeIva ? 1.16 : 1.0;
                     const amortRaw = this.getAttribute('data-amortizaciones') || '[]';
+                    const esRecurrente = this.getAttribute('data-recurrente') === '1';
+                    const frecuencia = this.getAttribute('data-frecuencia') || 'mensual';
                     let amortizaciones = [];
                     try { amortizaciones = JSON.parse(amortRaw); } catch(ex) {}
 
-                    document.getElementById('viewAmortCosto').textContent = '$' + (costo * factor_iva).toFixed(2);
-                    document.getElementById('viewAmortAnticipo').textContent = '$' + (anticipo * factor_iva).toFixed(2);
-                    document.getElementById('viewAmortMensualidad').textContent = '$' + (mensualidad * factor_iva).toFixed(2);
+                    const modalTitle = viewAmortizationModalEl.querySelector('.modal-title');
+                    const anticipoRow = viewAmortizationModalEl.querySelector('[id="viewAmortAnticipo"]').closest('.text-center');
+
+                    if (esRecurrente) {
+                        if (modalTitle) modalTitle.innerHTML = '<i class="bi bi-arrow-repeat me-2 text-primary"></i>Cobros Recurrentes Programados';
+                        if (anticipoRow) anticipoRow.style.display = 'none';
+                        document.getElementById('viewAmortCosto').textContent = '$' + (costo * factor_iva).toFixed(2);
+                        document.getElementById('viewAmortMensualidad').textContent = frecuencia.charAt(0).toUpperCase() + frecuencia.slice(1);
+                    } else {
+                        if (modalTitle) modalTitle.textContent = 'Tabla de Amortización';
+                        if (anticipoRow) anticipoRow.style.display = '';
+                        document.getElementById('viewAmortCosto').textContent = '$' + (costo * factor_iva).toFixed(2);
+                        document.getElementById('viewAmortAnticipo').textContent = '$' + (anticipo * factor_iva).toFixed(2);
+                        document.getElementById('viewAmortMensualidad').textContent = '$' + (mensualidad * factor_iva).toFixed(2);
+                    }
 
                     const tbody = document.getElementById('viewAmortBody');
                     const restante = costo - anticipo;
 
-                    // Fila del anticipo
-                    tbody.innerHTML = `
-                        <tr class="table-success">
-                            <td><strong>Anticipo Acordado</strong><br><small class="text-muted">Día 0</small></td>
-                            <td>$${anticipo.toFixed(2)}</td>
-                            <td>$${(incluyeIva ? anticipo * 0.16 : 0).toFixed(2)}</td>
-                            <td class="fw-bold">$${(anticipo * factor_iva).toFixed(2)}</td>
-                            <td>$${(restante * factor_iva).toFixed(2)}</td>
-                        </tr>
-                    `;
+                    if (!esRecurrente) {
+                        // Fila del anticipo (solo para financiamiento)
+                        tbody.innerHTML = `
+                            <tr class="table-success">
+                                <td><strong>Anticipo Acordado</strong><br><small class="text-muted">Día 0</small></td>
+                                <td>$${anticipo.toFixed(2)}</td>
+                                <td>$${(incluyeIva ? anticipo * 0.16 : 0).toFixed(2)}</td>
+                                <td class="fw-bold">$${(anticipo * factor_iva).toFixed(2)}</td>
+                                <td>$${(restante * factor_iva).toFixed(2)}</td>
+                            </tr>
+                        `;
+                    } else {
+                        tbody.innerHTML = '';
+                    }
 
                     if (amortizaciones.length > 0) {
-                        // Usar datos reales de BD con sus estados
                         amortizaciones.forEach(am => {
                             const isPagado  = am.estado === 'pagado';
                             const isVencido = am.es_vencido == 1 || am.estado === 'vencido';
@@ -1333,21 +1389,28 @@
                                 badge = '<br><span class="badge bg-success mt-1"><i class="bi bi-check-circle me-1"></i>Pagado</span>';
                             } else if (isVencido) {
                                 rowClass = 'table-danger';
-                                badge = '<br><span class="badge bg-danger mt-1">Pago Vencido</span>';
+                                badge = '<br><span class="badge bg-danger mt-1">Cobro Vencido</span>';
+                            } else {
+                                badge = '<br><span class="badge bg-warning text-dark mt-1">Pendiente</span>';
                             }
+
+                            const rowLabel = esRecurrente ? `Cobro ${am.numero_pago}` : `Mes ${am.numero_pago}`;
+                            const saldoCell = esRecurrente
+                                ? '<td class="text-muted small text-center">—</td>'
+                                : `<td>$${(saldoRest * factor_iva).toFixed(2)}</td>`;
 
                             tbody.innerHTML += `
                                 <tr class="${rowClass}">
-                                    <td>Mes ${am.numero_pago}<br><small class="${isVencido && !isPagado ? 'text-danger fw-bold' : 'text-muted'}">${fechaDisp}</small>${badge}</td>
+                                    <td>${rowLabel}<br><small class="${isVencido && !isPagado ? 'text-danger fw-bold' : 'text-muted'}">${fechaDisp}</small>${badge}</td>
                                     <td>$${monto.toFixed(2)}</td>
                                     <td>$${iva.toFixed(2)}</td>
                                     <td class="fw-bold">$${total.toFixed(2)}</td>
-                                    <td>$${(saldoRest * factor_iva).toFixed(2)}</td>
+                                    ${saldoCell}
                                 </tr>
                             `;
                         });
-                    } else {
-                        // Fallback: recalcular si no hay amortizaciones en BD
+                    } else if (!esRecurrente) {
+                        // Fallback solo para financiamiento si no hay amortizaciones en BD
                         const fechaStr = this.getAttribute('data-fecha') || '';
                         let pagoNum = 1;
                         let currentRestante = restante;
@@ -1376,6 +1439,8 @@
                             pagoNum++;
                             fechaObj.setMonth(fechaObj.getMonth() + 1);
                         }
+                    } else {
+                        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No hay cobros generados aún.</td></tr>';
                     }
 
                     viewAmortizationModal.show();

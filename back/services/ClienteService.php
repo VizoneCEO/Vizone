@@ -215,27 +215,31 @@ class ClienteService
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
 
+            $esRecurrente = intval($datos['es_recurrente'] ?? 0);
+
             $result = $stmt->execute([
                 $datos['cliente_id'],
                 $datos['tipo_servicio'] ?? 'Otro',
                 $datos['nombre_proyecto'],
                 $datos['tipo_pago'] ?? 'unico',
 
-                empty($datos['costo_total']) ? 0 : $datos['costo_total'],
-                empty($datos['pago_inicial']) ? 0 : $datos['pago_inicial'],
-                empty($datos['mensualidad_financiamiento']) ? 0 : $datos['mensualidad_financiamiento'],
-                empty($datos['meses_financiamiento']) ? 0 : $datos['meses_financiamiento'],
+                floatval($datos['costo_total'] ?? 0),
+                floatval($datos['pago_inicial'] ?? 0),
+                floatval($datos['mensualidad_financiamiento'] ?? 0),
+                intval($datos['meses_financiamiento'] ?? 0),
 
-                empty($datos['es_recurrente']) ? 0 : 1,
-                empty($datos['frecuencia_pago']) ? 'ninguno' : $datos['frecuencia_pago'],
-                empty($datos['fecha_proximo_pago']) ? null : $datos['fecha_proximo_pago'],
-                $datos['incluye_iva'] ?? 0
+                $esRecurrente,
+                (!empty($datos['frecuencia_pago']) && $datos['frecuencia_pago'] !== 'ninguno') ? $datos['frecuencia_pago'] : 'ninguno',
+                !empty($datos['fecha_proximo_pago']) ? $datos['fecha_proximo_pago'] : null,
+                intval($datos['incluye_iva'] ?? 0)
             ]);
 
             if ($result) {
                 $servicio_id = $this->db->lastInsertId();
                 if (($datos['tipo_pago'] ?? 'unico') === 'varios') {
                     $this->generarAmortizacion($servicio_id, $datos);
+                } elseif ($esRecurrente === 1 && !empty($datos['fecha_proximo_pago'])) {
+                    $this->generarCobrosRecurrentes($servicio_id, $datos);
                 }
             }
 
@@ -336,20 +340,22 @@ class ClienteService
                 WHERE id = ? AND cliente_id = ?
             ");
 
+            $esRecurrente = intval($datos['es_recurrente'] ?? 0);
+
             $result = $stmt->execute([
                 $datos['tipo_servicio'] ?? 'Otro',
                 $datos['nombre_proyecto'],
                 $datos['tipo_pago'] ?? 'unico',
 
-                empty($datos['costo_total']) ? 0 : $datos['costo_total'],
-                empty($datos['pago_inicial']) ? 0 : $datos['pago_inicial'],
-                empty($datos['mensualidad_financiamiento']) ? 0 : $datos['mensualidad_financiamiento'],
-                empty($datos['meses_financiamiento']) ? 0 : $datos['meses_financiamiento'],
+                floatval($datos['costo_total'] ?? 0),
+                floatval($datos['pago_inicial'] ?? 0),
+                floatval($datos['mensualidad_financiamiento'] ?? 0),
+                intval($datos['meses_financiamiento'] ?? 0),
 
-                empty($datos['es_recurrente']) ? 0 : 1,
-                empty($datos['frecuencia_pago']) ? 'ninguno' : $datos['frecuencia_pago'],
-                empty($datos['fecha_proximo_pago']) ? null : $datos['fecha_proximo_pago'],
-                $datos['incluye_iva'] ?? 0,
+                $esRecurrente,
+                (!empty($datos['frecuencia_pago']) && $datos['frecuencia_pago'] !== 'ninguno') ? $datos['frecuencia_pago'] : 'ninguno',
+                !empty($datos['fecha_proximo_pago']) ? $datos['fecha_proximo_pago'] : null,
+                intval($datos['incluye_iva'] ?? 0),
 
                 $datos['id'],
                 $datos['cliente_id']
@@ -357,7 +363,11 @@ class ClienteService
 
             if ($result && ($datos['tipo_pago'] ?? 'unico') === 'varios') {
                 $this->generarAmortizacion($datos['id'], $datos);
-            } else if ($result && ($datos['tipo_pago'] ?? 'unico') !== 'varios') {
+            } elseif ($result && $esRecurrente === 1 && !empty($datos['fecha_proximo_pago'])) {
+                // Recurrente: regenerar cobros
+                $this->generarCobrosRecurrentes($datos['id'], $datos);
+            } elseif ($result) {
+                // Si ya no es recurrente ni varios, limpiar amortizaciones
                 $stmtDel = $this->db->prepare("DELETE FROM servicio_amortizacion WHERE servicio_id = ?");
                 $stmtDel->execute([$datos['id']]);
             }
@@ -653,6 +663,71 @@ class ClienteService
             $this->db->rollBack();
             error_log("deleteCliente Error: " . $e->getMessage());
             return ['success' => false, 'message' => 'Error al eliminar el cliente.'];
+        }
+    }
+
+    /**
+     * Genera cobros recurrentes para servicios con es_recurrente = 1.
+     * Crea entradas en servicio_amortizacion desde la fecha_proximo_pago hasta
+     * cubrir todos los períodos vencidos más el siguiente período pendiente.
+     */
+    private function generarCobrosRecurrentes($servicio_id, $datos) {
+        // Borrar cobros anteriores pendientes (conservar los pagados)
+        $stmtDelPend = $this->db->prepare("DELETE FROM servicio_amortizacion WHERE servicio_id = ? AND estado = 'pendiente'");
+        $stmtDelPend->execute([$servicio_id]);
+
+        $frecuencia   = !empty($datos['frecuencia_pago']) ? $datos['frecuencia_pago'] : 'mensual';
+        $fecha_inicio = !empty($datos['fecha_proximo_pago']) ? $datos['fecha_proximo_pago'] : null;
+        $monto        = floatval($datos['costo_total'] ?? 0);
+
+        // Requerir al menos una fecha de inicio
+        if (empty($fecha_inicio)) return;
+
+        // Calcular el intervalo en función de la frecuencia
+        $interval_map = [
+            'quincenal' => '+15 days',
+            'mensual'   => '+1 month',
+            'semestral' => '+6 months',
+            'anual'     => '+1 year',
+        ];
+        $interval = $interval_map[$frecuencia] ?? '+1 month';
+
+        // Normalizar hora para comparaciones de fecha limpias
+        $hoy = new \DateTime();
+        $hoy->setTime(23, 59, 59); // Final del día de hoy
+        $fecha = new \DateTime($fecha_inicio);
+        $fecha->setTime(0, 0, 0);
+
+        // Obtener el último número de pago ya registrado (pagados)
+        $stmtMax = $this->db->prepare("SELECT COALESCE(MAX(numero_pago), 0) FROM servicio_amortizacion WHERE servicio_id = ?");
+        $stmtMax->execute([$servicio_id]);
+        $ultimo_num = (int)$stmtMax->fetchColumn();
+
+        $stmtIns = $this->db->prepare(
+            "INSERT INTO servicio_amortizacion (servicio_id, numero_pago, monto_esperado, fecha_esperada) VALUES (?, ?, ?, ?)"
+        );
+
+        $pago_num = $ultimo_num + 1;
+        $limite = $ultimo_num + 600;
+
+        // Generar todos los cobros vencidos (desde fecha inicio hasta hoy inclusive)
+        // más el siguiente cobro futuro pendiente.
+        while ($pago_num <= $limite) {
+            $fecha_str = $fecha->format('Y-m-d');
+
+            $stmtIns->execute([$servicio_id, $pago_num, $monto, $fecha_str]);
+            $pago_num++;
+
+            // Avanzar al siguiente período ANTES de chequear si ya pasamos de hoy
+            $fecha->modify($interval);
+
+            // Si el siguiente período ya está en el futuro, terminamos
+            if ($fecha > $hoy) {
+                // Insertar ese primer cobro futuro
+                $fecha_str = $fecha->format('Y-m-d');
+                $stmtIns->execute([$servicio_id, $pago_num, $monto, $fecha_str]);
+                break;
+            }
         }
     }
 
